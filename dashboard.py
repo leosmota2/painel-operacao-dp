@@ -11,7 +11,9 @@ st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 # =========================================================
 st.markdown("""
     <style>
-    /* Escondendo apenas o rodapé (marca d'água do Streamlit) */
+    /* Esconde o menu do Streamlit (os três pontinhos), cabeçalho e rodapé */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
     footer {visibility: hidden;}
     
     /* Estilo Geral - Fonte e Cores Base */
@@ -72,6 +74,17 @@ df = df.dropna(subset=['CÓD. COND.', 'CONDOMÍNIO']).copy()
 
 # Tratamento das colunas
 df['RESP'] = df['RESP'].astype(str).str.strip()
+
+# =========================================================
+# CORREÇÃO DOS NÚMEROS (Removendo as casas decimais)
+# =========================================================
+# Converte a coluna FUNC para número inteiro, preenchendo vazios com 0
+df['FUNC'] = pd.to_numeric(df['FUNC'], errors='coerce').fillna(0).astype(int)
+
+# Limpa a coluna de Código para remover o '.0' caso ele apareça
+df['CÓD. COND.'] = df['CÓD. COND.'].astype(str).str.replace('.0', '', regex=False)
+# =========================================================
+
 df['Possui Síndico Prof.'] = df['SÍNDICO PROFISSIONAL '].apply(
     lambda x: "Sim" if pd.notna(x) and str(x).strip() not in ['0', '0.0', 'nan'] else "Não"
 )
@@ -81,7 +94,7 @@ if 'Status do Fechamento' not in df.columns:
     df['Status do Fechamento'] = 'A Fazer'
 
 # =========================================================
-# 3. CARTÕES DE INDICADORES (USANDO A BLINDAGEM CSS)
+# 3. CARTÕES DE INDICADORES
 # =========================================================
 total_condominios = len(df)
 total_funcionarios = df['FUNC'].sum()
@@ -90,7 +103,6 @@ total_sindicos_prof = len(df[df['Possui Síndico Prof.'] == 'Sim'])
 st.write("---")
 col1, col2, col3 = st.columns(3)
 
-# Agora os cartões usam as classes seguras que criamos no CSS
 def desenhar_cartao(titulo, valor):
     return f"""
     <div class="kpi-card">
@@ -114,7 +126,6 @@ with col_graf1:
     carteira_analista = df['RESP'].value_counts().reset_index()
     carteira_analista.columns = ['Analista', 'Qtd']
     
-    # Gráfico Plotly Azul
     fig1 = px.bar(carteira_analista, x='Analista', y='Qtd', text_auto=True)
     fig1.update_traces(marker_color='#103149', marker_line_color='#091a26', marker_line_width=2, opacity=0.95)
     fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
@@ -126,7 +137,6 @@ with col_graf2:
     funcs_analista = df.groupby('RESP')['FUNC'].sum().reset_index()
     funcs_analista.columns = ['Analista', 'Qtd']
     
-    # Gráfico Plotly Laranja
     fig2 = px.bar(funcs_analista, x='Analista', y='Qtd', text_auto=True)
     fig2.update_traces(marker_color='#E55523', marker_line_color='#b33e14', marker_line_width=2, opacity=0.95)
     fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
@@ -151,8 +161,8 @@ df_exibicao = df.copy()
 
 # Aplica filtro de código
 if busca_codigo:
-    df_exibicao['Código Limpo'] = df_exibicao['CÓD. COND.'].astype(str).str.replace('.0', '', regex=False)
-    df_exibicao = df_exibicao[df_exibicao['Código Limpo'].str.contains(busca_codigo, na=False, case=False)]
+    # Como já limpamos o CÓD. COND. lá em cima, a busca fica mais direta
+    df_exibicao = df_exibicao[df_exibicao['CÓD. COND.'].str.contains(busca_codigo, na=False, case=False)]
 
 # Aplica filtro de status
 if status_selecionado:
@@ -171,7 +181,7 @@ def colorir_status(val):
 
 colunas_exibicao = ['CÓD. COND.', 'CONDOMÍNIO', 'FUNC', 'RESP', 'Status do Fechamento', 'Auditoria FGTS', 'eSocial/DCTFWeb']
 
-# Renderiza a tabela estilizada
+# Renderiza a tabela estilizada (com os números inteiros redondos)
 tabela_estilizada = df_exibicao[colunas_exibicao].style.map(colorir_status, subset=['Status do Fechamento'])
 st.dataframe(tabela_estilizada, use_container_width=True, hide_index=True)
 
