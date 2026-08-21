@@ -11,9 +11,7 @@ st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 # =========================================================
 st.markdown("""
     <style>
-    /* Esconde o menu do Streamlit (os três pontinhos), cabeçalho e rodapé */
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
+    /* Escondendo apenas o rodapé (marca d'água do Streamlit) */
     footer {visibility: hidden;}
     
     /* Estilo Geral - Fonte e Cores Base */
