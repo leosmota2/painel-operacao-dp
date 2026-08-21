@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import time
-import io  # <-- Nova ferramenta para criar o arquivo de download
+import io 
 
 # Configuração inicial da página
 st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
@@ -136,11 +136,15 @@ st.write("---")
 st.subheader("🤖 Auditoria de FGTS (Sistema x Robô de Guias)")
 st.write("Arraste os arquivos do seu sistema e do robô abaixo para cruzar os dados.")
 
+def limpar_arquivos():
+    if "file_sistema" in st.session_state: del st.session_state["file_sistema"]
+    if "file_robo" in st.session_state: del st.session_state["file_robo"]
+
 col_upload1, col_upload2 = st.columns(2)
 with col_upload1:
-    arquivo_sistema = st.file_uploader("📂 Base do Sistema (FolhaPagtoAnalitica.xls)", type=["xls", "xlsx"])
+    arquivo_sistema = st.file_uploader("📂 Base do Sistema (FolhaPagtoAnalitica.xls)", type=["xls", "xlsx"], key="file_sistema")
 with col_upload2:
-    arquivo_robo = st.file_uploader("🤖 Base do Robô (Relatorio.xlsx)", type=["xls", "xlsx"])
+    arquivo_robo = st.file_uploader("🤖 Base do Robô (Relatorio.xlsx)", type=["xls", "xlsx"], key="file_robo")
 
 if arquivo_sistema and arquivo_robo:
     if st.button("🔍 Cruzar Dados e Gerar Planilha", type="primary"):
@@ -191,7 +195,6 @@ if arquivo_sistema and arquivo_robo:
                 comparativo["Status da Conferência"] = comparativo.apply(definir_status, axis=1)
                 comparativo["Nome_Condominio"] = comparativo["Nome_Condominio"].fillna("Nome não encontrado no robô")
 
-                # Organização das colunas
                 colunas_finais = ["Cod_Empresa", "Nome_Condominio", "Valor_Folha_Total", "Valor_Robo", "Diferenca", "Status da Conferência"]
                 comparativo = comparativo[colunas_finais]
 
@@ -201,20 +204,22 @@ if arquivo_sistema and arquivo_robo:
                     comparativo.to_excel(writer, index=False, sheet_name='Auditoria_FGTS')
 
                 st.success("✅ Auditoria finalizada! Clique no botão abaixo para baixar o relatório.")
+                
                 st.download_button(
                     label="📥 Baixar Planilha de Auditoria",
                     data=buffer.getvalue(),
                     file_name="Auditoria_FGTS_Resultado.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="primary"
+                    type="primary",
+                    on_click=limpar_arquivos
                 )
 
             except Exception as e:
                 st.error(f"❌ Ocorreu um erro ao processar. Verifique se os arquivos são os corretos. Detalhe técnico: {e}")
 
 # =========================================================
-# 7. ATUALIZAÇÃO AUTOMÁTICA
+# 7. ATUALIZAÇÃO AUTOMÁTICA (A CADA 5 SEGUNDOS)
 # =========================================================
 if not (arquivo_sistema or arquivo_robo):
-    time.sleep(30)
+    time.sleep(5)
     st.rerun()
