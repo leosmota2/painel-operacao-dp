@@ -7,27 +7,33 @@ import os
 st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 
 # =========================================================
-# 1. CABEÇALHO E LOGO DA CONAC
+# 1. CABEÇALHO, LOGO E ESTILIZAÇÃO VISUAL (TEMA FIXO)
 # =========================================================
-# Verifica se você subiu o arquivo logo.png no GitHub
 if os.path.exists("logo.png"):
     st.image("logo.png", width=220)
 
 st.markdown("""
     <style>
-    html, body, [class*="css"]  { font-family: 'Visby CF', sans-serif; }
-    h1, h2, h3 { color: #103149 !important; font-weight: 800; }
+    /* Força o fundo da página a ser branco para destacar as cores da marca */
+    .stApp { background-color: #FFFFFF !important; }
     
-    /* Suporte ao Modo Escuro */
-    @media (prefers-color-scheme: dark) {
-        h1, h2, h3 { color: #FFFFFF !important; }
-        html, body, [class*="css"], p { color: #E0E0E0 !important; }
+    /* Fonte oficial e textos comuns no Cinza da Conac */
+    html, body, p, span, [class*="css"] { 
+        font-family: 'Visby CF', sans-serif; 
+        color: #444444 !important; 
     }
+    
+    /* Títulos sempre no Azul Conac */
+    h1, h2, h3, h4, h5, h6 { 
+        color: #103149 !important; 
+        font-weight: 800; 
+    }
+    
+    /* Exceção: Protege os textos de dentro dos nossos cartões para não ficarem cinzas */
+    div[style*="background-color: #103149"] p { color: #FFFFFF !important; }
+    div[style*="background-color: #103149"] h1 { color: #E55523 !important; }
     </style>
 """, unsafe_allow_html=True)
-
-st.title("🚀 Operação DP")
-st.write("Acompanhe a distribuição da carteira e os indicadores de fechamento da folha.")
 
 # =========================================================
 # 2. LEITURA DOS DADOS 
