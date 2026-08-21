@@ -1,38 +1,33 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import time
+import os
 
 st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 
 # =========================================================
-# 1. ESTILIZAÇÃO (SUPORTE INTELIGENTE CLARO/ESCURO)
+# 1. CABEÇALHO E LOGO DA CONAC
 # =========================================================
+# Verifica se você subiu o arquivo logo.png no GitHub
+if os.path.exists("logo.png"):
+    st.image("logo.png", width=220)
+
 st.markdown("""
     <style>
-    html, body, [class*="css"]  { font-family: 'Visby CF', sans-serif; color: #444444; }
-    h1, h2, h3, h4, h5, h6 { color: #103149 !important; font-weight: 800; }
+    html, body, [class*="css"]  { font-family: 'Visby CF', sans-serif; }
+    h1, h2, h3 { color: #103149 !important; font-weight: 800; }
     
-    div[data-testid="metric-container"] {
-        background-color: #103149;
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-        border-left: 8px solid #E55523;
-    }
-    
-    div[data-testid="metric-container"] label { color: #FFFFFF !important; font-weight: 600; opacity: 0.9; }
-    div[data-testid="metric-container"] div[data-testid="stMetricValue"] { color: #E55523 !important; font-weight: 900; font-size: 2.5rem; }
-
+    /* Suporte ao Modo Escuro */
     @media (prefers-color-scheme: dark) {
-        h1, h2, h3, h4, h5, h6 { color: #FFFFFF !important; }
-        html, body, [class*="css"] { color: #E0E0E0; }
-        div[data-testid="metric-container"] { border: 1px solid #333333; }
+        h1, h2, h3 { color: #FFFFFF !important; }
+        html, body, [class*="css"], p { color: #E0E0E0 !important; }
     }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Painel de Controle - Operação DP")
-st.write("Acompanhe a distribuição da carteira e os indicadores de fechamento da folha em tempo real.")
+st.title("🚀 Operação DP")
+st.write("Acompanhe a distribuição da carteira e os indicadores de fechamento da folha.")
 
 # =========================================================
 # 2. LEITURA DOS DADOS 
@@ -51,7 +46,7 @@ if 'Status do Fechamento' not in df.columns:
     df['Status do Fechamento'] = 'A Fazer'
 
 # =========================================================
-# 3. INDICADORES (KPIs)
+# 3. CARTÕES DE INDICADORES (COM RELEVO E SOMBRA 3D)
 # =========================================================
 total_condominios = len(df)
 total_funcionarios = df['FUNC'].sum()
@@ -59,29 +54,51 @@ total_sindicos_prof = len(df[df['Possui Síndico Prof.'] == 'Sim'])
 
 st.write("---")
 col1, col2, col3 = st.columns(3)
-col1.metric(label="Total de Condomínios Ativos", value=f"{total_condominios}")
-col2.metric(label="Total de Funcionários na Base", value=f"{int(total_funcionarios):,}".replace(",", "."))
-col3.metric(label="Síndicos Profissionais Atendidos", value=f"{total_sindicos_prof}")
+
+# Função para desenhar os cartões bonitos à prova de falhas do Streamlit
+def desenhar_cartao(titulo, valor):
+    return f"""
+    <div style="background-color: #103149; padding: 25px; border-radius: 12px; 
+                box-shadow: 4px 6px 15px rgba(0,0,0,0.25); border-left: 8px solid #E55523;
+                margin-bottom: 20px;">
+        <p style="color: #FFFFFF; margin: 0; font-size: 1.1rem; opacity: 0.9;">{titulo}</p>
+        <h1 style="color: #E55523 !important; margin: 0; font-size: 3rem; font-weight: 900;">{valor}</h1>
+    </div>
+    """
+
+col1.markdown(desenhar_cartao("Condomínios Ativos", total_condominios), unsafe_allow_html=True)
+col2.markdown(desenhar_cartao("Funcionários na Base", f"{int(total_funcionarios):,}".replace(",", ".")), unsafe_allow_html=True)
+col3.markdown(desenhar_cartao("Síndicos Profissionais", total_sindicos_prof), unsafe_allow_html=True)
 st.write("---")
 
 # =========================================================
-# 4. GRÁFICOS GERENCIAIS (ATUALIZADO)
+# 4. GRÁFICOS GERENCIAIS COM PLOTLY (VÍVIDOS E COM RELEVO)
 # =========================================================
 col_graf1, col_graf2 = st.columns(2)
 
 with col_graf1:
     st.subheader("👥 Volume de Condomínios")
-    # Conta quantos condomínios cada analista tem
     carteira_analista = df['RESP'].value_counts().reset_index()
-    carteira_analista.columns = ['Analista', 'Qtd Condomínios']
-    st.bar_chart(carteira_analista.set_index('Analista'), color="#103149")
+    carteira_analista.columns = ['Analista', 'Qtd']
+    
+    # Gráfico Plotly Azul
+    fig1 = px.bar(carteira_analista, x='Analista', y='Qtd', text_auto=True)
+    fig1.update_traces(marker_color='#103149', marker_line_color='#091a26', marker_line_width=2, opacity=0.95)
+    fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                       font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0))
+    st.plotly_chart(fig1, use_container_width=True)
 
 with col_graf2:
     st.subheader("🧑‍💼 Volume de Funcionários")
-    # Soma a quantidade de funcionários para cada analista
     funcs_analista = df.groupby('RESP')['FUNC'].sum().reset_index()
-    funcs_analista.columns = ['Analista', 'Qtd Funcionários']
-    st.bar_chart(funcs_analista.set_index('Analista'), color="#E55523")
+    funcs_analista.columns = ['Analista', 'Qtd']
+    
+    # Gráfico Plotly Laranja
+    fig2 = px.bar(funcs_analista, x='Analista', y='Qtd', text_auto=True)
+    fig2.update_traces(marker_color='#E55523', marker_line_color='#b33e14', marker_line_width=2, opacity=0.95)
+    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                       font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0))
+    st.plotly_chart(fig2, use_container_width=True)
 
 st.write("---")
 
@@ -119,7 +136,6 @@ def colorir_status(val):
 colunas_exibicao = ['CÓD. COND.', 'CONDOMÍNIO', 'FUNC', 'RESP', 'Status do Fechamento', 'Auditoria FGTS', 'eSocial/DCTFWeb']
 
 tabela_estilizada = df_exibicao[colunas_exibicao].style.map(colorir_status, subset=['Status do Fechamento'])
-
 st.dataframe(tabela_estilizada, use_container_width=True, hide_index=True)
 
 # =========================================================
