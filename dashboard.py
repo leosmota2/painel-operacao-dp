@@ -136,9 +136,12 @@ st.write("---")
 st.subheader("🤖 Auditoria de FGTS (Sistema x Robô de Guias)")
 st.write("Arraste os arquivos do seu sistema e do robô abaixo para cruzar os dados.")
 
-def limpar_arquivos():
+# Lógica de limpeza baseada em gatilho de sessão
+if "limpar_dados" in st.session_state and st.session_state["limpar_dados"]:
     if "file_sistema" in st.session_state: del st.session_state["file_sistema"]
     if "file_robo" in st.session_state: del st.session_state["file_robo"]
+    st.session_state["limpar_dados"] = False
+    st.rerun()
 
 col_upload1, col_upload2 = st.columns(2)
 with col_upload1:
@@ -205,13 +208,17 @@ if arquivo_sistema and arquivo_robo:
 
                 st.success("✅ Auditoria finalizada! Clique no botão abaixo para baixar o relatório.")
                 
+                # Função que ativa a bandeira de limpeza ao clicar no download
+                def acionar_limpeza():
+                    st.session_state["limpar_dados"] = True
+
                 st.download_button(
                     label="📥 Baixar Planilha de Auditoria",
                     data=buffer.getvalue(),
                     file_name="Auditoria_FGTS_Resultado.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     type="primary",
-                    on_click=limpar_arquivos
+                    on_click=acionar_limpeza
                 )
 
             except Exception as e:
