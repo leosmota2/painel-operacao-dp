@@ -142,7 +142,7 @@ with col_upload1:
 with col_upload2:
     arquivo_robo = st.file_uploader("🤖 Base do Robô (Relatorio.xlsx)", type=["xls", "xlsx"])
 
-# Lógica da Auditoria adaptada do seu script
+# Lógica da Auditoria blindada contra erros de texto
 if arquivo_sistema and arquivo_robo:
     if st.button("🔍 Cruzar Dados Agora", type="primary"):
         with st.spinner("Lendo planilhas e calculando divergências..."):
@@ -158,20 +158,24 @@ if arquivo_sistema and arquivo_robo:
                 df_bases = pd.read_excel(arquivo_sistema, sheet_name="TotalEmpresaBaseCalculo")
                 df_fgts = df_bases[df_bases["codigo_movto"] == 901].copy()
                 
-                # Tratamento seguro para números com vírgula do Excel
-                if df_fgts["valor"].dtype == object:
-                    df_fgts["valor"] = df_fgts["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
+                # Conversão forçada para garantir que o Excel não mande texto no FGTS
+                df_fgts["valor"] = df_fgts["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                df_fgts["valor"] = pd.to_numeric(df_fgts["valor"], errors="coerce").fillna(0)
                 
                 df_fgts = df_fgts[["empresa", "valor"]].rename(columns={"empresa": "Cod_Empresa", "valor": "Valor_FGTS"})
+                df_fgts["Cod_Empresa"] = pd.to_numeric(df_fgts["Cod_Empresa"], errors="coerce")
 
                 df_salarios = pd.read_excel(arquivo_sistema, sheet_name="TotalEmpresaSal")
                 df_consig = df_salarios[df_salarios["codigo_movto"].isin(CODIGOS_CONSIGNADOS)].copy()
                 
                 if not df_consig.empty:
-                    if df_consig["valor"].dtype == object:
-                        df_consig["valor"] = df_consig["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
+                    # Conversão forçada para garantir que o Excel não mande texto no Consignado
+                    df_consig["valor"] = df_consig["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                    df_consig["valor"] = pd.to_numeric(df_consig["valor"], errors="coerce").fillna(0)
+                    
                     df_consig = df_consig.groupby("empresa")["valor"].sum().reset_index()
                     df_consig = df_consig.rename(columns={"empresa": "Cod_Empresa", "valor": "Valor_Consignado"})
+                    df_consig["Cod_Empresa"] = pd.to_numeric(df_consig["Cod_Empresa"], errors="coerce")
                 else:
                     df_consig = pd.DataFrame(columns=["Cod_Empresa", "Valor_Consignado"])
 
@@ -208,6 +212,14 @@ if arquivo_sistema and arquivo_robo:
 
             except Exception as e:
                 st.error(f"❌ Ocorreu um erro ao processar. Verifique se os arquivos são os corretos. Detalhe técnico: {e}")
+
+# =========================================================
+# 7. ATUALIZAÇÃO AUTOMÁTICA (COM PAUSA INTELIGENTE)
+# =========================================================
+# Só atualiza a página sozinho se o usuário NÃO estiver fazendo uma auditoria
+if not (arquivo_sistema or arquivo_robo):
+    time.sleep(30)
+    st.rerun()
 
 # =========================================================
 # 7. ATUALIZAÇÃO AUTOMÁTICA (COM PAUSA INTELIGENTE)
