@@ -63,27 +63,23 @@ st.title("🚀 Operação DP")
 st.write("Acompanhe a distribuição da carteira e os indicadores de fechamento da folha.")
 
 # =========================================================
-# 2. LEITURA DOS DADOS 
+# 2. LEITURA DOS DADOS (CONECTADO AO GOOGLE SHEETS)
 # =========================================================
-arquivo_excel = "Controle_Folha_Com_Filtro.xlsx"
-aba = "Agosto-2026" 
+# Link direto da sua planilha no Google
+link_google = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTMUmPETtYMKsb0IpZSIlXoYHcdSRiE7TxofU-CIoQjYn-aBGAB03frKpEs5e4cy6JrjpvFOF8jssNL/pub?output=csv" 
 
-# Lê a planilha e limpa dados em branco
-df = pd.read_excel(arquivo_excel, sheet_name=aba)
+# Lê a planilha direto da nuvem
+df = pd.read_csv(link_google)
 df = df.dropna(subset=['CÓD. COND.', 'CONDOMÍNIO']).copy()
 
 # Tratamento das colunas
 df['RESP'] = df['RESP'].astype(str).str.strip()
 
-# =========================================================
-# CORREÇÃO DOS NÚMEROS (Removendo as casas decimais)
-# =========================================================
 # Converte a coluna FUNC para número inteiro, preenchendo vazios com 0
 df['FUNC'] = pd.to_numeric(df['FUNC'], errors='coerce').fillna(0).astype(int)
 
 # Limpa a coluna de Código para remover o '.0' caso ele apareça
 df['CÓD. COND.'] = df['CÓD. COND.'].astype(str).str.replace('.0', '', regex=False)
-# =========================================================
 
 df['Possui Síndico Prof.'] = df['SÍNDICO PROFISSIONAL '].apply(
     lambda x: "Sim" if pd.notna(x) and str(x).strip() not in ['0', '0.0', 'nan'] else "Não"
@@ -161,7 +157,6 @@ df_exibicao = df.copy()
 
 # Aplica filtro de código
 if busca_codigo:
-    # Como já limpamos o CÓD. COND. lá em cima, a busca fica mais direta
     df_exibicao = df_exibicao[df_exibicao['CÓD. COND.'].str.contains(busca_codigo, na=False, case=False)]
 
 # Aplica filtro de status
