@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import time
+import io  # <-- Nova ferramenta para criar o arquivo de download
 
 # Configuração inicial da página
 st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
@@ -11,7 +12,7 @@ st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 # =========================================================
 st.markdown("""
     <style>
-    /* Escondendo apenas o rodapé (marca d'água do Streamlit). O menu superior CONTINUA ATIVO! */
+    /* Escondendo apenas o rodapé (marca d'água do Streamlit). */
     footer {visibility: hidden;}
     
     /* Estilo Geral - Fonte e Cores Base */
@@ -51,7 +52,6 @@ st.write("Acompanhe a distribuição da carteira e os indicadores de fechamento 
 # =========================================================
 # 2. LEITURA DOS DADOS (CONECTADO AO GOOGLE SHEETS)
 # =========================================================
-# Link direto da sua planilha no Google
 link_google = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTMUmPETtYMKsb0IpZSIlXoYHcdSRiE7TxofU-CIoQjYn-aBGAB03frKpEs5e4cy6JrjpvFOF8jssNL/pub?output=csv" 
 
 df = pd.read_csv(link_google)
@@ -131,10 +131,10 @@ st.dataframe(df_exibicao[colunas_exibicao].style.map(colorir_status, subset=['St
 st.write("---")
 
 # =========================================================
-# 6. SESSÃO DE AUDITORIA AUTOMÁTICA DE FGTS
+# 6. SESSÃO DE AUDITORIA AUTOMÁTICA DE FGTS (DOWNLOAD EXCEL)
 # =========================================================
 st.subheader("🤖 Auditoria de FGTS (Sistema x Robô de Guias)")
-st.write("Arraste os arquivos do seu sistema e do robô abaixo para encontrar as divergências em segundos.")
+st.write("Arraste os arquivos do seu sistema e do robô abaixo para cruzar os dados.")
 
 col_upload1, col_upload2 = st.columns(2)
 with col_upload1:
@@ -142,9 +142,8 @@ with col_upload1:
 with col_upload2:
     arquivo_robo = st.file_uploader("🤖 Base do Robô (Relatorio.xlsx)", type=["xls", "xlsx"])
 
-# Lógica da Auditoria blindada contra erros de texto
 if arquivo_sistema and arquivo_robo:
-    if st.button("🔍 Cruzar Dados Agora", type="primary"):
+    if st.button("🔍 Cruzar Dados e Gerar Planilha", type="primary"):
         with st.spinner("Lendo planilhas e calculando divergências..."):
             try:
                 CODIGOS_CONSIGNADOS = [716, 717, 718, 719, 720]
@@ -157,11 +156,8 @@ if arquivo_sistema and arquivo_robo:
                 # 2. Folha do Sistema (FGTS + Consignados)
                 df_bases = pd.read_excel(arquivo_sistema, sheet_name="TotalEmpresaBaseCalculo")
                 df_fgts = df_bases[df_bases["codigo_movto"] == 901].copy()
-                
-                # Conversão forçada para garantir que o Excel não mande texto no FGTS
                 df_fgts["valor"] = df_fgts["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
                 df_fgts["valor"] = pd.to_numeric(df_fgts["valor"], errors="coerce").fillna(0)
-                
                 df_fgts = df_fgts[["empresa", "valor"]].rename(columns={"empresa": "Cod_Empresa", "valor": "Valor_FGTS"})
                 df_fgts["Cod_Empresa"] = pd.to_numeric(df_fgts["Cod_Empresa"], errors="coerce")
 
@@ -169,10 +165,8 @@ if arquivo_sistema and arquivo_robo:
                 df_consig = df_salarios[df_salarios["codigo_movto"].isin(CODIGOS_CONSIGNADOS)].copy()
                 
                 if not df_consig.empty:
-                    # Conversão forçada para garantir que o Excel não mande texto no Consignado
                     df_consig["valor"] = df_consig["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
                     df_consig["valor"] = pd.to_numeric(df_consig["valor"], errors="coerce").fillna(0)
-                    
                     df_consig = df_consig.groupby("empresa")["valor"].sum().reset_index()
                     df_consig = df_consig.rename(columns={"empresa": "Cod_Empresa", "valor": "Valor_Consignado"})
                     df_consig["Cod_Empresa"] = pd.to_numeric(df_consig["Cod_Empresa"], errors="coerce")
@@ -190,41 +184,37 @@ if arquivo_sistema and arquivo_robo:
 
                 # 4. Status
                 def definir_status(linha):
-                    if linha["_merge"] == "left_only": return "⚠️ ALERTA: Guia não baixada"
-                    elif abs(linha["Diferenca"]) > 0.50: return "❌ ERRO: Valores não batem"
-                    else: return "✅ OK"
+                    if linha["_merge"] == "left_only": return "ALERTA: Guia não baixada"
+                    elif abs(linha["Diferenca"]) > 0.50: return "ERRO: Valores não batem"
+                    else: return "OK"
 
                 comparativo["Status da Conferência"] = comparativo.apply(definir_status, axis=1)
                 comparativo["Nome_Condominio"] = comparativo["Nome_Condominio"].fillna("Nome não encontrado no robô")
 
-                # Organização e Cores
+                # Organização das colunas
                 colunas_finais = ["Cod_Empresa", "Nome_Condominio", "Valor_Folha_Total", "Valor_Robo", "Diferenca", "Status da Conferência"]
                 comparativo = comparativo[colunas_finais]
 
-                def cor_auditoria(val):
-                    if '✅' in str(val): return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;'
-                    if '❌' in str(val): return 'background-color: #FFEBEB; color: #D32F2F; font-weight: bold;'
-                    if '⚠️' in str(val): return 'background-color: #FFF3E0; color: #E65100; font-weight: bold;'
-                    return ''
+                # 5. Criando o arquivo Excel em memória para download
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    comparativo.to_excel(writer, index=False, sheet_name='Auditoria_FGTS')
 
-                st.success("✅ Auditoria finalizada! Veja os resultados abaixo:")
-                st.dataframe(comparativo.style.map(cor_auditoria, subset=['Status da Conferência']), use_container_width=True, hide_index=True)
+                st.success("✅ Auditoria finalizada! Clique no botão abaixo para baixar o relatório.")
+                st.download_button(
+                    label="📥 Baixar Planilha de Auditoria",
+                    data=buffer.getvalue(),
+                    file_name="Auditoria_FGTS_Resultado.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
+                )
 
             except Exception as e:
                 st.error(f"❌ Ocorreu um erro ao processar. Verifique se os arquivos são os corretos. Detalhe técnico: {e}")
 
 # =========================================================
-# 7. ATUALIZAÇÃO AUTOMÁTICA (COM PAUSA INTELIGENTE)
+# 7. ATUALIZAÇÃO AUTOMÁTICA
 # =========================================================
-# Só atualiza a página sozinho se o usuário NÃO estiver fazendo uma auditoria
-if not (arquivo_sistema or arquivo_robo):
-    time.sleep(30)
-    st.rerun()
-
-# =========================================================
-# 7. ATUALIZAÇÃO AUTOMÁTICA (COM PAUSA INTELIGENTE)
-# =========================================================
-# Só atualiza a página sozinho se o usuário NÃO estiver fazendo uma auditoria
 if not (arquivo_sistema or arquivo_robo):
     time.sleep(30)
     st.rerun()
