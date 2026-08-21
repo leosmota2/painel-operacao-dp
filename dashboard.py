@@ -59,7 +59,7 @@ if 'Status do Fechamento' not in df.columns:
     df['Status do Fechamento'] = 'A Fazer'
 
 # =========================================================
-# 3. CARTÕES DE INDICADORES (CORES BLINDADAS)
+# 3. CARTÕES DE INDICADORES (BLINDAGEM TOTAL DE CORES)
 # =========================================================
 total_condominios = len(df)
 total_funcionarios = df['FUNC'].sum()
@@ -68,14 +68,14 @@ total_sindicos_prof = len(df[df['Possui Síndico Prof.'] == 'Sim'])
 st.write("---")
 col1, col2, col3 = st.columns(3)
 
-# Função com estilo inline forçando as cores corretas
+# Substituí as tags <p> e <h1> por <div> para driblar a formatação cinza automática
 def desenhar_cartao(titulo, valor):
     return f"""
     <div style="background-color: #103149; padding: 25px; border-radius: 12px; 
                 box-shadow: 4px 6px 15px rgba(0,0,0,0.25); border-left: 8px solid #E55523;
                 margin-bottom: 20px;">
-        <p style="color: #FFFFFF !important; margin: 0; font-size: 1.1rem; opacity: 1 !important;">{titulo}</p>
-        <h1 style="color: #E55523 !important; margin: 0; font-size: 3rem; font-weight: 900 !important;">{valor}</h1>
+        <div style="color: #FFFFFF !important; font-size: 1.1rem; margin-bottom: 5px;">{titulo}</div>
+        <div style="color: #E55523 !important; font-size: 3rem; font-weight: 900 !important; line-height: 1;">{valor}</div>
     </div>
     """
 
