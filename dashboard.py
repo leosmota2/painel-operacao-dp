@@ -2,42 +2,36 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import time
-import os
 
 # Configuração inicial da página
 st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 
 # =========================================================
-# 1. CABEÇALHO, LOGO CENTRALIZADA E ESTILIZAÇÃO ADAPTATIVA
+# 1. ESTILIZAÇÃO ADAPTATIVA E REMOÇÃO DE MENUS
 # =========================================================
-# Centraliza a logo usando colunas
-col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
-with col_logo2:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", use_container_width=True)
-
 st.markdown("""
     <style>
+    /* Esconde o menu do Streamlit (os três pontinhos), cabeçalho e rodapé */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    
     /* Estilo Geral - Fonte e Cores Base */
     html, body, [class*="css"] { font-family: 'Visby CF', sans-serif; }
     
-    /* Configuração para o Modo Escuro */
+    /* Configuração para o Modo Escuro Automático */
     @media (prefers-color-scheme: dark) {
         h1, h2, h3, h4, h5, h6 { color: #FFFFFF !important; }
         html, body, p, span, [class*="css"] { color: #E0E0E0 !important; }
         .stApp { background-color: #121212 !important; } 
     }
 
-    /* Configuração para o Modo Claro */
+    /* Configuração para o Modo Claro Automático */
     @media (prefers-color-scheme: light) {
         h1, h2, h3, h4, h5, h6 { color: #103149 !important; font-weight: 800; }
         html, body, p, span, [class*="css"] { color: #444444 !important; }
         .stApp { background-color: #FFFFFF !important; }
     }
-    
-    /* Proteção extrema para os textos dentro dos cartões não ficarem cinzas ou invisíveis */
-    .cartao-kpi p { color: #FFFFFF !important; opacity: 0.9 !important; }
-    .cartao-kpi h1 { color: #E55523 !important; font-weight: 900 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -65,7 +59,7 @@ if 'Status do Fechamento' not in df.columns:
     df['Status do Fechamento'] = 'A Fazer'
 
 # =========================================================
-# 3. CARTÕES DE INDICADORES (COM RELEVO E SOMBRA 3D)
+# 3. CARTÕES DE INDICADORES (CORES BLINDADAS)
 # =========================================================
 total_condominios = len(df)
 total_funcionarios = df['FUNC'].sum()
@@ -74,14 +68,14 @@ total_sindicos_prof = len(df[df['Possui Síndico Prof.'] == 'Sim'])
 st.write("---")
 col1, col2, col3 = st.columns(3)
 
-# Função com a classe 'cartao-kpi' para forçar as cores corretas
+# Função com estilo inline forçando as cores corretas
 def desenhar_cartao(titulo, valor):
     return f"""
-    <div class="cartao-kpi" style="background-color: #103149; padding: 25px; border-radius: 12px; 
+    <div style="background-color: #103149; padding: 25px; border-radius: 12px; 
                 box-shadow: 4px 6px 15px rgba(0,0,0,0.25); border-left: 8px solid #E55523;
                 margin-bottom: 20px;">
-        <p style="margin: 0; font-size: 1.1rem;">{titulo}</p>
-        <h1 style="margin: 0; font-size: 3rem;">{valor}</h1>
+        <p style="color: #FFFFFF !important; margin: 0; font-size: 1.1rem; opacity: 1 !important;">{titulo}</p>
+        <h1 style="color: #E55523 !important; margin: 0; font-size: 3rem; font-weight: 900 !important;">{valor}</h1>
     </div>
     """
 
