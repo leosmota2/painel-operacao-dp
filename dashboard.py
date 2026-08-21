@@ -59,7 +59,7 @@ if 'Status do Fechamento' not in df.columns:
     df['Status do Fechamento'] = 'A Fazer'
 
 # =========================================================
-# 3. CARTÕES DE INDICADORES (BLINDAGEM TOTAL DE CORES)
+# 3. CARTÕES DE INDICADORES (NOVO VISUAL CLARO E CONTRASTADO)
 # =========================================================
 total_condominios = len(df)
 total_funcionarios = df['FUNC'].sum()
@@ -68,14 +68,14 @@ total_sindicos_prof = len(df[df['Possui Síndico Prof.'] == 'Sim'])
 st.write("---")
 col1, col2, col3 = st.columns(3)
 
-# Substituí as tags <p> e <h1> por <div> para driblar a formatação cinza automática
+# Cartão com fundo claro, texto Azul Conac e números em Laranja Conac
 def desenhar_cartao(titulo, valor):
     return f"""
-    <div style="background-color: #103149; padding: 25px; border-radius: 12px; 
-                box-shadow: 4px 6px 15px rgba(0,0,0,0.25); border-left: 8px solid #E55523;
-                margin-bottom: 20px;">
-        <div style="color: #FFFFFF !important; font-size: 1.1rem; margin-bottom: 5px;">{titulo}</div>
-        <div style="color: #E55523 !important; font-size: 3rem; font-weight: 900 !important; line-height: 1;">{valor}</div>
+    <div style="background-color: #F8F9FA; padding: 25px; border-radius: 12px; 
+                box-shadow: 2px 4px 10px rgba(0,0,0,0.1); border-left: 8px solid #E55523;
+                border: 1px solid #EAEAEA; margin-bottom: 20px;">
+        <div style="color: #103149 !important; font-size: 1.2rem; font-weight: 700; margin-bottom: 5px;">{titulo}</div>
+        <div style="color: #E55523 !important; font-size: 3.5rem; font-weight: 900 !important; line-height: 1;">{valor}</div>
     </div>
     """
 
