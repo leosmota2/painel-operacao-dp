@@ -136,18 +136,16 @@ st.write("---")
 st.subheader("🤖 Auditoria de FGTS (Sistema x Robô de Guias)")
 st.write("Arraste os arquivos do seu sistema e do robô abaixo para cruzar os dados.")
 
-# Lógica de limpeza baseada em gatilho de sessão
-if "limpar_dados" in st.session_state and st.session_state["limpar_dados"]:
-    if "file_sistema" in st.session_state: del st.session_state["file_sistema"]
-    if "file_robo" in st.session_state: del st.session_state["file_robo"]
-    st.session_state["limpar_dados"] = False
-    st.rerun()
+# Lógica da Chave Dinâmica: Inicia o contador invisível
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
 
 col_upload1, col_upload2 = st.columns(2)
 with col_upload1:
-    arquivo_sistema = st.file_uploader("📂 Base do Sistema (FolhaPagtoAnalitica.xls)", type=["xls", "xlsx"], key="file_sistema")
+    # A chave agora tem o número do contador grudada nela
+    arquivo_sistema = st.file_uploader("📂 Base do Sistema (FolhaPagtoAnalitica.xls)", type=["xls", "xlsx"], key=f"file_sistema_{st.session_state.uploader_key}")
 with col_upload2:
-    arquivo_robo = st.file_uploader("🤖 Base do Robô (Relatorio.xlsx)", type=["xls", "xlsx"], key="file_robo")
+    arquivo_robo = st.file_uploader("🤖 Base do Robô (Relatorio.xlsx)", type=["xls", "xlsx"], key=f"file_robo_{st.session_state.uploader_key}")
 
 if arquivo_sistema and arquivo_robo:
     if st.button("🔍 Cruzar Dados e Gerar Planilha", type="primary"):
@@ -208,9 +206,9 @@ if arquivo_sistema and arquivo_robo:
 
                 st.success("✅ Auditoria finalizada! Clique no botão abaixo para baixar o relatório.")
                 
-                # Função que ativa a bandeira de limpeza ao clicar no download
-                def acionar_limpeza():
-                    st.session_state["limpar_dados"] = True
+                # O Truque: Toda vez que baixar, muda o número da chave, recriando as caixinhas zeradas
+                def limpar_uploaders():
+                    st.session_state.uploader_key += 1
 
                 st.download_button(
                     label="📥 Baixar Planilha de Auditoria",
@@ -218,7 +216,7 @@ if arquivo_sistema and arquivo_robo:
                     file_name="Auditoria_FGTS_Resultado.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     type="primary",
-                    on_click=acionar_limpeza
+                    on_click=limpar_uploaders
                 )
 
             except Exception as e:
