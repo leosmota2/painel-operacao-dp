@@ -8,7 +8,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 
 # =========================================================
-# 1. ESTILIZAÇÃO ADAPTATIVA E BLINDAGEM DOS CARTÕES
+# 1. ESTILIZAÇÃO ADAPTATIVA E BLINDAGEM DOS CARTÕES (OTIMIZADO PARA MOBILE)
 # =========================================================
 st.markdown("""
     <style>
@@ -48,6 +48,19 @@ st.markdown("""
     }
     div.kpi-card .kpi-title { color: #FFFFFF !important; font-size: 1.1rem !important; opacity: 0.9 !important; margin-bottom: 5px !important; }
     div.kpi-card .kpi-value { color: #E55523 !important; font-size: 3rem !important; font-weight: 900 !important; line-height: 1 !important; }
+
+    /* OTIMIZAÇÃO PARA CELULARES (MOBILE) */
+    @media (max-width: 768px) {
+        div.kpi-card { padding: 15px !important; margin-bottom: 15px !important; }
+        div.kpi-card .kpi-title { font-size: 0.9rem !important; }
+        div.kpi-card .kpi-value { font-size: 2rem !important; }
+        .stProgress > div > div > div > div { background-color: #E55523 !important; } /* Deixa a barra laranja no mobile também */
+    }
+    
+    /* Cor da Barra de Progresso do Termômetro */
+    .stProgress > div > div > div > div {
+        background-color: #E55523 !important; 
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -57,7 +70,6 @@ st.markdown("""
 link_compartilhamento = "https://docs.google.com/spreadsheets/d/1QzO8FrhW-C4pH8JldKdOkVPwcZXEly76lDixSzPu9Uo/edit?usp=sharing" 
 link_excel = link_compartilhamento.split('/edit')[0] + '/export?format=xlsx'
 
-# Cache configurado para manter os dados na memória (evita carregamentos desnecessários)
 @st.cache_data(ttl=1800)
 def carregar_planilha_completa(url):
     return pd.read_excel(url, sheet_name=None)
@@ -66,7 +78,6 @@ try:
     todas_as_abas = carregar_planilha_completa(link_excel)
     lista_abas = list(todas_as_abas.keys())
 
-    # Cria o título, o Seletor de Mês e o Botão de Atualizar lado a lado
     col_titulo, col_mes, col_btn = st.columns([2.5, 1.5, 1])
     with col_titulo:
         st.title("🚀 Operação DP")
@@ -74,14 +85,12 @@ try:
     with col_mes:
         aba_selecionada = st.selectbox("📅 Mês de Referência:", lista_abas, index=len(lista_abas)-1)
     with col_btn:
-        st.write("") # Espaçamento para alinhar o botão com os outros elementos
+        st.write("") 
         st.write("")
-        # Botão que força a limpeza do cache e atualiza a tela na hora
         if st.button("🔄 Atualizar Painel", use_container_width=True):
             carregar_planilha_completa.clear()
             st.rerun()
 
-    # Aplica os dados apenas da aba que o usuário selecionou
     df = todas_as_abas[aba_selecionada]
     
     df = df.dropna(subset=['CÓD. COND.', 'CONDOMÍNIO']).copy()
@@ -91,32 +100,45 @@ try:
     df['Possui Síndico Prof.'] = df['SÍNDICO PROFISSIONAL '].apply(lambda x: "Sim" if pd.notna(x) and str(x).strip() not in ['0', '0.0', 'nan'] else "Não")
 
     if 'Status do Fechamento' not in df.columns: df['Status do Fechamento'] = 'A Fazer'
+    if 'eSocial/DCTFWeb' not in df.columns: df['eSocial/DCTFWeb'] = 'Pendente'
 
     # =========================================================
-    # 3. CARTÕES DE INDICADORES
+    # 3. TERMÔMETRO E CARTÕES DE INDICADORES
     # =========================================================
     total_condominios = len(df)
     total_funcionarios = df['FUNC'].sum()
     total_sindicos_prof = len(df[df['Possui Síndico Prof.'] == 'Sim'])
+    
+    # Cálculos para as novas métricas
+    qtd_concluido = len(df[df['Status do Fechamento'] == 'Concluído'])
+    progresso_pct = int((qtd_concluido / total_condominios) * 100) if total_condominios > 0 else 0
+    
+    # eSocial: Folha concluída, mas eSocial ainda não
+    pendencias_esocial = len(df[(df['Status do Fechamento'] == 'Concluído') & (~df['eSocial/DCTFWeb'].isin(['Concluído', 'Enviado', 'Sim', 'OK']))])
 
     st.write("---")
-    col1, col2, col3 = st.columns(3)
+    st.markdown(f"### 🎯 Termômetro do Fechamento: **{progresso_pct}% Concluído**")
+    st.progress(progresso_pct / 100)
+    st.write("")
+    
+    col1, col2, col3, col4 = st.columns(4)
 
     def desenhar_cartao(titulo, valor):
         return f"""<div class="kpi-card"><div class="kpi-title">{titulo}</div><div class="kpi-value">{valor}</div></div>"""
 
-    col1.markdown(desenhar_cartao("Condomínios Ativos", total_condominios), unsafe_allow_html=True)
-    col2.markdown(desenhar_cartao("Funcionários na Base", f"{int(total_funcionarios):,}".replace(",", ".")), unsafe_allow_html=True)
-    col3.markdown(desenhar_cartao("Síndicos Profissionais", total_sindicos_prof), unsafe_allow_html=True)
+    col1.markdown(desenhar_cartao("Condomínios", total_condominios), unsafe_allow_html=True)
+    col2.markdown(desenhar_cartao("Funcionários", f"{int(total_funcionarios):,}".replace(",", ".")), unsafe_allow_html=True)
+    col3.markdown(desenhar_cartao("Síndicos Prof.", total_sindicos_prof), unsafe_allow_html=True)
+    col4.markdown(desenhar_cartao("🚨 Alertas eSocial", pendencias_esocial), unsafe_allow_html=True)
     st.write("---")
 
     # =========================================================
-    # 4. GRÁFICOS GERENCIAIS COM PLOTLY
+    # 4. GRÁFICOS GERENCIAIS COM PLOTLY (AGORA EM 3 COLUNAS)
     # =========================================================
-    col_graf1, col_graf2 = st.columns(2)
+    col_graf1, col_graf2, col_graf3 = st.columns(3)
 
     with col_graf1:
-        st.subheader("👥 Volume de Condomínios")
+        st.subheader("👥 Carteira por Analista")
         carteira_analista = df['RESP'].value_counts().reset_index()
         carteira_analista.columns = ['Analista', 'Qtd']
         fig1 = px.bar(carteira_analista, x='Analista', y='Qtd', text_auto=True)
@@ -125,7 +147,7 @@ try:
         st.plotly_chart(fig1, use_container_width=True)
 
     with col_graf2:
-        st.subheader("🧑‍💼 Volume de Funcionários")
+        st.subheader("🧑‍💼 Vidas por Analista")
         funcs_analista = df.groupby('RESP')['FUNC'].sum().reset_index()
         funcs_analista.columns = ['Analista', 'Qtd']
         fig2 = px.bar(funcs_analista, x='Analista', y='Qtd', text_auto=True)
@@ -133,10 +155,20 @@ try:
         fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0))
         st.plotly_chart(fig2, use_container_width=True)
 
+    with col_graf3:
+        st.subheader("🍩 Status Geral da Base")
+        status_counts = df['Status do Fechamento'].value_counts().reset_index()
+        status_counts.columns = ['Status', 'Qtd']
+        mapa_cores = {'Concluído': '#2E7D32', 'Em Andamento': '#E65100', 'A Fazer': '#D32F2F'}
+        fig3 = px.pie(status_counts, names='Status', values='Qtd', hole=0.55, color='Status', color_discrete_map=mapa_cores)
+        fig3.update_traces(textinfo='percent+label', textposition='inside')
+        fig3.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0), showlegend=False)
+        st.plotly_chart(fig3, use_container_width=True)
+
     st.write("---")
 
     # =========================================================
-    # 5. TABELA DE GESTÃO DO FECHAMENTO
+    # 5. TABELA DE GESTÃO COM ALERTAS VISUAIS
     # =========================================================
     st.subheader("📑 Gestão do Fechamento de Folha")
     col_filtro1, col_filtro2 = st.columns(2)
@@ -154,9 +186,21 @@ try:
         elif val == 'Concluído': return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;' 
         elif val == 'Em Andamento': return 'background-color: #FFF3E0; color: #E65100; font-weight: bold;' 
         return ''
+        
+    def colorir_esocial(val):
+        val_str = str(val).strip()
+        if val_str in ['Pendente', 'A Fazer', 'Não', 'nan']: return 'background-color: #FFEBEB; color: #D32F2F; font-weight: bold;' 
+        elif val_str in ['Concluído', 'Enviado', 'Sim']: return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;' 
+        return ''
 
     colunas_exibicao = ['CÓD. COND.', 'CONDOMÍNIO', 'FUNC', 'RESP', 'Status do Fechamento', 'Auditoria FGTS', 'eSocial/DCTFWeb']
-    st.dataframe(df_exibicao[colunas_exibicao].style.map(colorir_status, subset=['Status do Fechamento']), use_container_width=True, hide_index=True)
+    
+    # Aplica as cores na tabela (Status da Folha e Status do eSocial separados)
+    tabela_estilizada = df_exibicao[colunas_exibicao].style\
+        .map(colorir_status, subset=['Status do Fechamento'])\
+        .map(colorir_esocial, subset=['eSocial/DCTFWeb'])
+        
+    st.dataframe(tabela_estilizada, use_container_width=True, hide_index=True)
     st.write("---")
 
 except Exception as erro_leitura:
@@ -246,8 +290,7 @@ if arquivo_sistema and arquivo_robo:
                 st.error(f"❌ Erro ao cruzar os dados. Detalhe técnico: {e}")
 
 # =========================================================
-# 7. ATUALIZAÇÃO AUTOMÁTICA (A CADA 30 MINUTOS)
+# 7. ATUALIZAÇÃO AUTOMÁTICA INVISÍVEL (A CADA 30 MINUTOS)
 # =========================================================
-# 30 minutos = 1.800.000 milissegundos
 if not (arquivo_sistema or arquivo_robo):
     st_autorefresh(interval=1800000, limit=None, key="atualizacao_continua_dp")
