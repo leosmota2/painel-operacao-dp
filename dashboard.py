@@ -4,7 +4,6 @@ import plotly.express as px
 import time
 import io 
 
-# Configuração inicial da página
 st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 
 # =========================================================
@@ -12,27 +11,21 @@ st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 # =========================================================
 st.markdown("""
     <style>
-    /* Escondendo apenas o rodapé (marca d'água do Streamlit). */
     footer {visibility: hidden;}
-    
-    /* Estilo Geral - Fonte e Cores Base */
     html, body, [class*="css"] { font-family: 'Visby CF', sans-serif; }
     
-    /* Configuração para o Modo Escuro Automático */
     @media (prefers-color-scheme: dark) {
         h1, h2, h3, h4, h5, h6 { color: #FFFFFF !important; }
         html, body, p, span, [class*="css"] { color: #E0E0E0 !important; }
         .stApp { background-color: #121212 !important; } 
     }
 
-    /* Configuração para o Modo Claro Automático */
     @media (prefers-color-scheme: light) {
         h1, h2, h3, h4, h5, h6 { color: #103149 !important; font-weight: 800; }
         html, body, p, span, [class*="css"] { color: #444444 !important; }
         .stApp { background-color: #FFFFFF !important; }
     }
     
-    /* BLINDAGEM TOTAL DOS CARTÕES */
     div.kpi-card {
         background-color: #103149 !important;
         padding: 25px !important;
@@ -46,89 +39,113 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Operação DP")
-st.write("Acompanhe a distribuição da carteira e os indicadores de fechamento da folha.")
-
 # =========================================================
-# 2. LEITURA DOS DADOS (CONECTADO AO GOOGLE SHEETS)
+# 2. LEITURA INTELIGENTE MULTI-ABAS (GOOGLE SHEETS)
 # =========================================================
-link_google = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTMUmPETtYMKsb0IpZSIlXoYHcdSRiE7TxofU-CIoQjYn-aBGAB03frKpEs5e4cy6JrjpvFOF8jssNL/pub?output=csv" 
+# COLE O SEU LINK DE COMPARTILHAMENTO NORMAL AQUI EMBAIXO:
+link_compartilhamento = "https://docs.google.com/spreadsheets/d/1QzO8FrhW-C4pH8JldKdOkVPwcZXEly76lDixSzPu9Uo/edit?usp=sharing" 
 
-df = pd.read_csv(link_google)
-df = df.dropna(subset=['CÓD. COND.', 'CONDOMÍNIO']).copy()
-df['RESP'] = df['RESP'].astype(str).str.strip()
-df['FUNC'] = pd.to_numeric(df['FUNC'], errors='coerce').fillna(0).astype(int)
-df['CÓD. COND.'] = df['CÓD. COND.'].astype(str).str.replace('.0', '', regex=False)
-df['Possui Síndico Prof.'] = df['SÍNDICO PROFISSIONAL '].apply(lambda x: "Sim" if pd.notna(x) and str(x).strip() not in ['0', '0.0', 'nan'] else "Não")
+# O código transforma o link de visualização em link de extração de dados sozinho
+link_excel = link_compartilhamento.split('/edit')[0] + '/export?format=xlsx'
 
-if 'Status do Fechamento' not in df.columns: df['Status do Fechamento'] = 'A Fazer'
+# Cache de segurança para ler abas de forma otimizada
+@st.cache_data(ttl=5)
+def carregar_planilha_completa(url):
+    return pd.read_excel(url, sheet_name=None)
 
-# =========================================================
-# 3. CARTÕES DE INDICADORES
-# =========================================================
-total_condominios = len(df)
-total_funcionarios = df['FUNC'].sum()
-total_sindicos_prof = len(df[df['Possui Síndico Prof.'] == 'Sim'])
+try:
+    todas_as_abas = carregar_planilha_completa(link_excel)
+    lista_abas = list(todas_as_abas.keys())
 
-st.write("---")
-col1, col2, col3 = st.columns(3)
+    # Cria o título e o Seletor de Mês lado a lado
+    col_titulo, col_mes = st.columns([2, 1])
+    with col_titulo:
+        st.title("🚀 Operação DP")
+        st.write("Acompanhe a distribuição da carteira e os indicadores de fechamento da folha.")
+    with col_mes:
+        # Menu que puxa automaticamente a última aba criada por padrão
+        aba_selecionada = st.selectbox("📅 Mês de Referência:", lista_abas, index=len(lista_abas)-1)
 
-def desenhar_cartao(titulo, valor):
-    return f"""<div class="kpi-card"><div class="kpi-title">{titulo}</div><div class="kpi-value">{valor}</div></div>"""
+    # Aplica os dados apenas da aba que o usuário selecionou
+    df = todas_as_abas[aba_selecionada]
+    
+    df = df.dropna(subset=['CÓD. COND.', 'CONDOMÍNIO']).copy()
+    df['RESP'] = df['RESP'].astype(str).str.strip()
+    df['FUNC'] = pd.to_numeric(df['FUNC'], errors='coerce').fillna(0).astype(int)
+    df['CÓD. COND.'] = df['CÓD. COND.'].astype(str).str.replace('.0', '', regex=False)
+    df['Possui Síndico Prof.'] = df['SÍNDICO PROFISSIONAL '].apply(lambda x: "Sim" if pd.notna(x) and str(x).strip() not in ['0', '0.0', 'nan'] else "Não")
 
-col1.markdown(desenhar_cartao("Condomínios Ativos", total_condominios), unsafe_allow_html=True)
-col2.markdown(desenhar_cartao("Funcionários na Base", f"{int(total_funcionarios):,}".replace(",", ".")), unsafe_allow_html=True)
-col3.markdown(desenhar_cartao("Síndicos Profissionais", total_sindicos_prof), unsafe_allow_html=True)
-st.write("---")
+    if 'Status do Fechamento' not in df.columns: df['Status do Fechamento'] = 'A Fazer'
 
-# =========================================================
-# 4. GRÁFICOS GERENCIAIS COM PLOTLY
-# =========================================================
-col_graf1, col_graf2 = st.columns(2)
+    # =========================================================
+    # 3. CARTÕES DE INDICADORES
+    # =========================================================
+    total_condominios = len(df)
+    total_funcionarios = df['FUNC'].sum()
+    total_sindicos_prof = len(df[df['Possui Síndico Prof.'] == 'Sim'])
 
-with col_graf1:
-    st.subheader("👥 Volume de Condomínios")
-    carteira_analista = df['RESP'].value_counts().reset_index()
-    carteira_analista.columns = ['Analista', 'Qtd']
-    fig1 = px.bar(carteira_analista, x='Analista', y='Qtd', text_auto=True)
-    fig1.update_traces(marker_color='#103149', marker_line_color='#091a26', marker_line_width=2, opacity=0.95)
-    fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0))
-    st.plotly_chart(fig1, use_container_width=True)
+    st.write("---")
+    col1, col2, col3 = st.columns(3)
 
-with col_graf2:
-    st.subheader("🧑‍💼 Volume de Funcionários")
-    funcs_analista = df.groupby('RESP')['FUNC'].sum().reset_index()
-    funcs_analista.columns = ['Analista', 'Qtd']
-    fig2 = px.bar(funcs_analista, x='Analista', y='Qtd', text_auto=True)
-    fig2.update_traces(marker_color='#E55523', marker_line_color='#b33e14', marker_line_width=2, opacity=0.95)
-    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0))
-    st.plotly_chart(fig2, use_container_width=True)
+    def desenhar_cartao(titulo, valor):
+        return f"""<div class="kpi-card"><div class="kpi-title">{titulo}</div><div class="kpi-value">{valor}</div></div>"""
 
-st.write("---")
+    col1.markdown(desenhar_cartao("Condomínios Ativos", total_condominios), unsafe_allow_html=True)
+    col2.markdown(desenhar_cartao("Funcionários na Base", f"{int(total_funcionarios):,}".replace(",", ".")), unsafe_allow_html=True)
+    col3.markdown(desenhar_cartao("Síndicos Profissionais", total_sindicos_prof), unsafe_allow_html=True)
+    st.write("---")
 
-# =========================================================
-# 5. TABELA DE GESTÃO DO FECHAMENTO
-# =========================================================
-st.subheader("📑 Gestão do Fechamento de Folha")
-col_filtro1, col_filtro2 = st.columns(2)
-with col_filtro1: busca_codigo = st.text_input("🔍 Buscar por Código do Condomínio:")
-with col_filtro2: 
-    lista_status = df['Status do Fechamento'].unique().tolist()
-    status_selecionado = st.multiselect("📊 Filtrar por Status da Folha:", options=lista_status, default=lista_status)
+    # =========================================================
+    # 4. GRÁFICOS GERENCIAIS COM PLOTLY
+    # =========================================================
+    col_graf1, col_graf2 = st.columns(2)
 
-df_exibicao = df.copy()
-if busca_codigo: df_exibicao = df_exibicao[df_exibicao['CÓD. COND.'].str.contains(busca_codigo, na=False, case=False)]
-if status_selecionado: df_exibicao = df_exibicao[df_exibicao['Status do Fechamento'].isin(status_selecionado)]
+    with col_graf1:
+        st.subheader("👥 Volume de Condomínios")
+        carteira_analista = df['RESP'].value_counts().reset_index()
+        carteira_analista.columns = ['Analista', 'Qtd']
+        fig1 = px.bar(carteira_analista, x='Analista', y='Qtd', text_auto=True)
+        fig1.update_traces(marker_color='#103149', marker_line_color='#091a26', marker_line_width=2, opacity=0.95)
+        fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0))
+        st.plotly_chart(fig1, use_container_width=True)
 
-def colorir_status(val):
-    if val == 'A Fazer': return 'background-color: #FFEBEB; color: #D32F2F; font-weight: bold;' 
-    elif val == 'Concluído': return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;' 
-    elif val == 'Em Andamento': return 'background-color: #FFF3E0; color: #E65100; font-weight: bold;' 
-    return ''
+    with col_graf2:
+        st.subheader("🧑‍💼 Volume de Funcionários")
+        funcs_analista = df.groupby('RESP')['FUNC'].sum().reset_index()
+        funcs_analista.columns = ['Analista', 'Qtd']
+        fig2 = px.bar(funcs_analista, x='Analista', y='Qtd', text_auto=True)
+        fig2.update_traces(marker_color='#E55523', marker_line_color='#b33e14', marker_line_width=2, opacity=0.95)
+        fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0))
+        st.plotly_chart(fig2, use_container_width=True)
 
-colunas_exibicao = ['CÓD. COND.', 'CONDOMÍNIO', 'FUNC', 'RESP', 'Status do Fechamento', 'Auditoria FGTS', 'eSocial/DCTFWeb']
-st.dataframe(df_exibicao[colunas_exibicao].style.map(colorir_status, subset=['Status do Fechamento']), use_container_width=True, hide_index=True)
-st.write("---")
+    st.write("---")
+
+    # =========================================================
+    # 5. TABELA DE GESTÃO DO FECHAMENTO
+    # =========================================================
+    st.subheader("📑 Gestão do Fechamento de Folha")
+    col_filtro1, col_filtro2 = st.columns(2)
+    with col_filtro1: busca_codigo = st.text_input("🔍 Buscar por Código do Condomínio:")
+    with col_filtro2: 
+        lista_status = df['Status do Fechamento'].unique().tolist()
+        status_selecionado = st.multiselect("📊 Filtrar por Status da Folha:", options=lista_status, default=lista_status)
+
+    df_exibicao = df.copy()
+    if busca_codigo: df_exibicao = df_exibicao[df_exibicao['CÓD. COND.'].str.contains(busca_codigo, na=False, case=False)]
+    if status_selecionado: df_exibicao = df_exibicao[df_exibicao['Status do Fechamento'].isin(status_selecionado)]
+
+    def colorir_status(val):
+        if val == 'A Fazer': return 'background-color: #FFEBEB; color: #D32F2F; font-weight: bold;' 
+        elif val == 'Concluído': return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;' 
+        elif val == 'Em Andamento': return 'background-color: #FFF3E0; color: #E65100; font-weight: bold;' 
+        return ''
+
+    colunas_exibicao = ['CÓD. COND.', 'CONDOMÍNIO', 'FUNC', 'RESP', 'Status do Fechamento', 'Auditoria FGTS', 'eSocial/DCTFWeb']
+    st.dataframe(df_exibicao[colunas_exibicao].style.map(colorir_status, subset=['Status do Fechamento']), use_container_width=True, hide_index=True)
+    st.write("---")
+
+except Exception as erro_leitura:
+    st.error(f"Erro ao ler a planilha principal: Verifique se o link de compartilhamento está correto. ({erro_leitura})")
 
 # =========================================================
 # 6. SESSÃO DE AUDITORIA AUTOMÁTICA DE FGTS (DOWNLOAD EXCEL)
@@ -136,13 +153,17 @@ st.write("---")
 st.subheader("🤖 Auditoria de FGTS (Sistema x Robô de Guias)")
 st.write("Arraste os arquivos do seu sistema e do robô abaixo para cruzar os dados.")
 
-# Lógica da Chave Dinâmica: Inicia o contador invisível
+if "limpar_dados" in st.session_state and st.session_state["limpar_dados"]:
+    if "file_sistema" in st.session_state: del st.session_state["file_sistema"]
+    if "file_robo" in st.session_state: del st.session_state["file_robo"]
+    st.session_state["limpar_dados"] = False
+    st.rerun()
+
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
 col_upload1, col_upload2 = st.columns(2)
 with col_upload1:
-    # A chave agora tem o número do contador grudada nela
     arquivo_sistema = st.file_uploader("📂 Base do Sistema (FolhaPagtoAnalitica.xls)", type=["xls", "xlsx"], key=f"file_sistema_{st.session_state.uploader_key}")
 with col_upload2:
     arquivo_robo = st.file_uploader("🤖 Base do Robô (Relatorio.xlsx)", type=["xls", "xlsx"], key=f"file_robo_{st.session_state.uploader_key}")
@@ -152,13 +173,10 @@ if arquivo_sistema and arquivo_robo:
         with st.spinner("Lendo planilhas e calculando divergências..."):
             try:
                 CODIGOS_CONSIGNADOS = [716, 717, 718, 719, 720]
+                df_robo_fgts = pd.read_excel(arquivo_robo)
+                df_robo_fgts = df_robo_fgts.rename(columns={"Código": "Cod_Empresa", "Valor Guia": "Valor_Robo", "Cond": "Nome_Condominio"})
+                df_robo_fgts["Cod_Empresa"] = pd.to_numeric(df_robo_fgts["Cod_Empresa"], errors="coerce")
 
-                # 1. Relatório do Robô
-                df_robo = pd.read_excel(arquivo_robo)
-                df_robo = df_robo.rename(columns={"Código": "Cod_Empresa", "Valor Guia": "Valor_Robo", "Cond": "Nome_Condominio"})
-                df_robo["Cod_Empresa"] = pd.to_numeric(df_robo["Cod_Empresa"], errors="coerce")
-
-                # 2. Folha do Sistema (FGTS + Consignados)
                 df_bases = pd.read_excel(arquivo_sistema, sheet_name="TotalEmpresaBaseCalculo")
                 df_fgts = df_bases[df_bases["codigo_movto"] == 901].copy()
                 df_fgts["valor"] = df_fgts["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
@@ -181,13 +199,11 @@ if arquivo_sistema and arquivo_robo:
                 df_folha_consolidada = pd.merge(df_fgts, df_consig, on="Cod_Empresa", how="outer").fillna(0)
                 df_folha_consolidada["Valor_Folha_Total"] = df_folha_consolidada["Valor_FGTS"] + df_folha_consolidada["Valor_Consignado"]
 
-                # 3. Cruzamento
-                comparativo = pd.merge(df_folha_consolidada, df_robo, on="Cod_Empresa", how="left", indicator=True)
+                comparativo = pd.merge(df_folha_consolidada, df_robo_fgts, on="Cod_Empresa", how="left", indicator=True)
                 comparativo["Valor_Folha_Total"] = comparativo["Valor_Folha_Total"].fillna(0)
                 comparativo["Valor_Robo"] = comparativo["Valor_Robo"].fillna(0)
                 comparativo["Diferenca"] = comparativo["Valor_Folha_Total"] - comparativo["Valor_Robo"]
 
-                # 4. Status
                 def definir_status(linha):
                     if linha["_merge"] == "left_only": return "ALERTA: Guia não baixada"
                     elif abs(linha["Diferenca"]) > 0.50: return "ERRO: Valores não batem"
@@ -195,18 +211,15 @@ if arquivo_sistema and arquivo_robo:
 
                 comparativo["Status da Conferência"] = comparativo.apply(definir_status, axis=1)
                 comparativo["Nome_Condominio"] = comparativo["Nome_Condominio"].fillna("Nome não encontrado no robô")
-
                 colunas_finais = ["Cod_Empresa", "Nome_Condominio", "Valor_Folha_Total", "Valor_Robo", "Diferenca", "Status da Conferência"]
                 comparativo = comparativo[colunas_finais]
 
-                # 5. Criando o arquivo Excel em memória para download
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                     comparativo.to_excel(writer, index=False, sheet_name='Auditoria_FGTS')
 
                 st.success("✅ Auditoria finalizada! Clique no botão abaixo para baixar o relatório.")
                 
-                # O Truque: Toda vez que baixar, muda o número da chave, recriando as caixinhas zeradas
                 def limpar_uploaders():
                     st.session_state.uploader_key += 1
 
@@ -220,7 +233,7 @@ if arquivo_sistema and arquivo_robo:
                 )
 
             except Exception as e:
-                st.error(f"❌ Ocorreu um erro ao processar. Verifique se os arquivos são os corretos. Detalhe técnico: {e}")
+                st.error(f"❌ Erro ao cruzar os dados. Detalhe técnico: {e}")
 
 # =========================================================
 # 7. ATUALIZAÇÃO AUTOMÁTICA (A CADA 5 SEGUNDOS)
