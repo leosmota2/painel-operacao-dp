@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import time
 import io 
+from streamlit_autorefresh import st_autorefresh 
 
+# Configuração inicial da página
 st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 
 # =========================================================
@@ -11,21 +12,32 @@ st.set_page_config(page_title="Painel de DP - Conac", layout="wide")
 # =========================================================
 st.markdown("""
     <style>
+    /* Escondendo o rodapé */
     footer {visibility: hidden;}
+    
+    /* BLINDAGEM CONTRA O PISCAR DE CARREGAMENTO (ESCURECIMENTO) */
+    [data-testid="stStatusWidget"] { display: none !important; }
+    [data-testid="stAppViewContainer"] { opacity: 1 !important; transition: none !important; }
+    [data-testid="stHeader"] { opacity: 1 !important; }
+    
+    /* Estilo Geral - Fonte e Cores Base */
     html, body, [class*="css"] { font-family: 'Visby CF', sans-serif; }
     
+    /* Configuração para o Modo Escuro Automático */
     @media (prefers-color-scheme: dark) {
         h1, h2, h3, h4, h5, h6 { color: #FFFFFF !important; }
         html, body, p, span, [class*="css"] { color: #E0E0E0 !important; }
         .stApp { background-color: #121212 !important; } 
     }
 
+    /* Configuração para o Modo Claro Automático */
     @media (prefers-color-scheme: light) {
         h1, h2, h3, h4, h5, h6 { color: #103149 !important; font-weight: 800; }
         html, body, p, span, [class*="css"] { color: #444444 !important; }
         .stApp { background-color: #FFFFFF !important; }
     }
     
+    /* BLINDAGEM TOTAL DOS CARTÕES */
     div.kpi-card {
         background-color: #103149 !important;
         padding: 25px !important;
@@ -42,13 +54,13 @@ st.markdown("""
 # =========================================================
 # 2. LEITURA INTELIGENTE MULTI-ABAS (GOOGLE SHEETS)
 # =========================================================
-# COLE O SEU LINK DE COMPARTILHAMENTO NORMAL AQUI EMBAIXO:
+# Link de compartilhamento atualizado
 link_compartilhamento = "https://docs.google.com/spreadsheets/d/1QzO8FrhW-C4pH8JldKdOkVPwcZXEly76lDixSzPu9Uo/edit?usp=sharing" 
 
 # O código transforma o link de visualização em link de extração de dados sozinho
 link_excel = link_compartilhamento.split('/edit')[0] + '/export?format=xlsx'
 
-# Cache de segurança para ler abas de forma otimizada
+# Cache de segurança para ler abas de forma super rápida (Dura apenas 5 segundos)
 @st.cache_data(ttl=5)
 def carregar_planilha_completa(url):
     return pd.read_excel(url, sheet_name=None)
@@ -153,12 +165,6 @@ except Exception as erro_leitura:
 st.subheader("🤖 Auditoria de FGTS (Sistema x Robô de Guias)")
 st.write("Arraste os arquivos do seu sistema e do robô abaixo para cruzar os dados.")
 
-if "limpar_dados" in st.session_state and st.session_state["limpar_dados"]:
-    if "file_sistema" in st.session_state: del st.session_state["file_sistema"]
-    if "file_robo" in st.session_state: del st.session_state["file_robo"]
-    st.session_state["limpar_dados"] = False
-    st.rerun()
-
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
@@ -173,6 +179,7 @@ if arquivo_sistema and arquivo_robo:
         with st.spinner("Lendo planilhas e calculando divergências..."):
             try:
                 CODIGOS_CONSIGNADOS = [716, 717, 718, 719, 720]
+
                 df_robo_fgts = pd.read_excel(arquivo_robo)
                 df_robo_fgts = df_robo_fgts.rename(columns={"Código": "Cod_Empresa", "Valor Guia": "Valor_Robo", "Cond": "Nome_Condominio"})
                 df_robo_fgts["Cod_Empresa"] = pd.to_numeric(df_robo_fgts["Cod_Empresa"], errors="coerce")
@@ -236,8 +243,9 @@ if arquivo_sistema and arquivo_robo:
                 st.error(f"❌ Erro ao cruzar os dados. Detalhe técnico: {e}")
 
 # =========================================================
-# 7. ATUALIZAÇÃO AUTOMÁTICA (A CADA 5 SEGUNDOS)
+# 7. ATUALIZAÇÃO AUTOMÁTICA INVISÍVEL
 # =========================================================
+# A ferramenta só é ativada se a página não estiver executando auditoria
 if not (arquivo_sistema or arquivo_robo):
-    time.sleep(5)
-    st.rerun()
+    # Auto-refresh configurado para 5000 ms (5 segundos), rodando invisível em segundo plano
+    st_autorefresh(interval=5000, limit=None, key="atualizacao_continua_dp")
