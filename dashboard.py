@@ -54,12 +54,6 @@ st.markdown("""
         div.kpi-card { padding: 15px !important; margin-bottom: 15px !important; }
         div.kpi-card .kpi-title { font-size: 0.9rem !important; }
         div.kpi-card .kpi-value { font-size: 2rem !important; }
-        .stProgress > div > div > div > div { background-color: #E55523 !important; } /* Deixa a barra laranja no mobile também */
-    }
-    
-    /* Cor da Barra de Progresso do Termômetro */
-    .stProgress > div > div > div > div {
-        background-color: #E55523 !important; 
     }
     </style>
 """, unsafe_allow_html=True)
@@ -100,45 +94,32 @@ try:
     df['Possui Síndico Prof.'] = df['SÍNDICO PROFISSIONAL '].apply(lambda x: "Sim" if pd.notna(x) and str(x).strip() not in ['0', '0.0', 'nan'] else "Não")
 
     if 'Status do Fechamento' not in df.columns: df['Status do Fechamento'] = 'A Fazer'
-    if 'eSocial/DCTFWeb' not in df.columns: df['eSocial/DCTFWeb'] = 'Pendente'
 
     # =========================================================
-    # 3. TERMÔMETRO E CARTÕES DE INDICADORES
+    # 3. CARTÕES DE INDICADORES
     # =========================================================
     total_condominios = len(df)
     total_funcionarios = df['FUNC'].sum()
     total_sindicos_prof = len(df[df['Possui Síndico Prof.'] == 'Sim'])
-    
-    # Cálculos para as novas métricas
-    qtd_concluido = len(df[df['Status do Fechamento'] == 'Concluído'])
-    progresso_pct = int((qtd_concluido / total_condominios) * 100) if total_condominios > 0 else 0
-    
-    # eSocial: Folha concluída, mas eSocial ainda não
-    pendencias_esocial = len(df[(df['Status do Fechamento'] == 'Concluído') & (~df['eSocial/DCTFWeb'].isin(['Concluído', 'Enviado', 'Sim', 'OK']))])
 
     st.write("---")
-    st.markdown(f"### 🎯 Termômetro do Fechamento: **{progresso_pct}% Concluído**")
-    st.progress(progresso_pct / 100)
-    st.write("")
-    
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
 
     def desenhar_cartao(titulo, valor):
         return f"""<div class="kpi-card"><div class="kpi-title">{titulo}</div><div class="kpi-value">{valor}</div></div>"""
 
-    col1.markdown(desenhar_cartao("Condomínios", total_condominios), unsafe_allow_html=True)
-    col2.markdown(desenhar_cartao("Funcionários", f"{int(total_funcionarios):,}".replace(",", ".")), unsafe_allow_html=True)
-    col3.markdown(desenhar_cartao("Síndicos Prof.", total_sindicos_prof), unsafe_allow_html=True)
-    col4.markdown(desenhar_cartao("🚨 Alertas eSocial", pendencias_esocial), unsafe_allow_html=True)
+    col1.markdown(desenhar_cartao("Condomínios Ativos", total_condominios), unsafe_allow_html=True)
+    col2.markdown(desenhar_cartao("Funcionários na Base", f"{int(total_funcionarios):,}".replace(",", ".")), unsafe_allow_html=True)
+    col3.markdown(desenhar_cartao("Síndicos Profissionais", total_sindicos_prof), unsafe_allow_html=True)
     st.write("---")
 
     # =========================================================
-    # 4. GRÁFICOS GERENCIAIS COM PLOTLY (AGORA EM 3 COLUNAS)
+    # 4. GRÁFICOS GERENCIAIS COM PLOTLY
     # =========================================================
-    col_graf1, col_graf2, col_graf3 = st.columns(3)
+    col_graf1, col_graf2 = st.columns(2)
 
     with col_graf1:
-        st.subheader("👥 Carteira por Analista")
+        st.subheader("👥 Volume de Condomínios")
         carteira_analista = df['RESP'].value_counts().reset_index()
         carteira_analista.columns = ['Analista', 'Qtd']
         fig1 = px.bar(carteira_analista, x='Analista', y='Qtd', text_auto=True)
@@ -147,7 +128,7 @@ try:
         st.plotly_chart(fig1, use_container_width=True)
 
     with col_graf2:
-        st.subheader("🧑‍💼 Vidas por Analista")
+        st.subheader("🧑‍💼 Volume de Funcionários")
         funcs_analista = df.groupby('RESP')['FUNC'].sum().reset_index()
         funcs_analista.columns = ['Analista', 'Qtd']
         fig2 = px.bar(funcs_analista, x='Analista', y='Qtd', text_auto=True)
@@ -155,20 +136,10 @@ try:
         fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0))
         st.plotly_chart(fig2, use_container_width=True)
 
-    with col_graf3:
-        st.subheader("🍩 Status Geral da Base")
-        status_counts = df['Status do Fechamento'].value_counts().reset_index()
-        status_counts.columns = ['Status', 'Qtd']
-        mapa_cores = {'Concluído': '#2E7D32', 'Em Andamento': '#E65100', 'A Fazer': '#D32F2F'}
-        fig3 = px.pie(status_counts, names='Status', values='Qtd', hole=0.55, color='Status', color_discrete_map=mapa_cores)
-        fig3.update_traces(textinfo='percent+label', textposition='inside')
-        fig3.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_family="Visby CF", margin=dict(t=20, b=20, l=0, r=0), showlegend=False)
-        st.plotly_chart(fig3, use_container_width=True)
-
     st.write("---")
 
     # =========================================================
-    # 5. TABELA DE GESTÃO COM ALERTAS VISUAIS
+    # 5. TABELA DE GESTÃO DO FECHAMENTO
     # =========================================================
     st.subheader("📑 Gestão do Fechamento de Folha")
     col_filtro1, col_filtro2 = st.columns(2)
@@ -186,21 +157,9 @@ try:
         elif val == 'Concluído': return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;' 
         elif val == 'Em Andamento': return 'background-color: #FFF3E0; color: #E65100; font-weight: bold;' 
         return ''
-        
-    def colorir_esocial(val):
-        val_str = str(val).strip()
-        if val_str in ['Pendente', 'A Fazer', 'Não', 'nan']: return 'background-color: #FFEBEB; color: #D32F2F; font-weight: bold;' 
-        elif val_str in ['Concluído', 'Enviado', 'Sim']: return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;' 
-        return ''
 
     colunas_exibicao = ['CÓD. COND.', 'CONDOMÍNIO', 'FUNC', 'RESP', 'Status do Fechamento', 'Auditoria FGTS', 'eSocial/DCTFWeb']
-    
-    # Aplica as cores na tabela (Status da Folha e Status do eSocial separados)
-    tabela_estilizada = df_exibicao[colunas_exibicao].style\
-        .map(colorir_status, subset=['Status do Fechamento'])\
-        .map(colorir_esocial, subset=['eSocial/DCTFWeb'])
-        
-    st.dataframe(tabela_estilizada, use_container_width=True, hide_index=True)
+    st.dataframe(df_exibicao[colunas_exibicao].style.map(colorir_status, subset=['Status do Fechamento']), use_container_width=True, hide_index=True)
     st.write("---")
 
 except Exception as erro_leitura:
