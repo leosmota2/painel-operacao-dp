@@ -15,7 +15,7 @@ st.markdown("""
     /* Escondendo o rodapé */
     footer {visibility: hidden;}
     
-    /* BLINDAGEM CONTRA O PISCAR DE CARREGAMENTO (ESCURECIMENTO) */
+    /* BLINDAGEM CONTRA O PISCAR DE CARREGAMENTO */
     [data-testid="stStatusWidget"] { display: none !important; }
     [data-testid="stAppViewContainer"] { opacity: 1 !important; transition: none !important; }
     [data-testid="stHeader"] { opacity: 1 !important; }
@@ -54,14 +54,11 @@ st.markdown("""
 # =========================================================
 # 2. LEITURA INTELIGENTE MULTI-ABAS (GOOGLE SHEETS)
 # =========================================================
-# Link de compartilhamento atualizado
 link_compartilhamento = "https://docs.google.com/spreadsheets/d/1QzO8FrhW-C4pH8JldKdOkVPwcZXEly76lDixSzPu9Uo/edit?usp=sharing" 
-
-# O código transforma o link de visualização em link de extração de dados sozinho
 link_excel = link_compartilhamento.split('/edit')[0] + '/export?format=xlsx'
 
-# Cache de segurança para ler abas de forma super rápida (Dura apenas 5 segundos)
-@st.cache_data(ttl=5)
+# Cache configurado para manter os dados na memória (evita carregamentos desnecessários)
+@st.cache_data(ttl=1800)
 def carregar_planilha_completa(url):
     return pd.read_excel(url, sheet_name=None)
 
@@ -69,14 +66,20 @@ try:
     todas_as_abas = carregar_planilha_completa(link_excel)
     lista_abas = list(todas_as_abas.keys())
 
-    # Cria o título e o Seletor de Mês lado a lado
-    col_titulo, col_mes = st.columns([2, 1])
+    # Cria o título, o Seletor de Mês e o Botão de Atualizar lado a lado
+    col_titulo, col_mes, col_btn = st.columns([2.5, 1.5, 1])
     with col_titulo:
         st.title("🚀 Operação DP")
         st.write("Acompanhe a distribuição da carteira e os indicadores de fechamento da folha.")
     with col_mes:
-        # Menu que puxa automaticamente a última aba criada por padrão
         aba_selecionada = st.selectbox("📅 Mês de Referência:", lista_abas, index=len(lista_abas)-1)
+    with col_btn:
+        st.write("") # Espaçamento para alinhar o botão com os outros elementos
+        st.write("")
+        # Botão que força a limpeza do cache e atualiza a tela na hora
+        if st.button("🔄 Atualizar Painel", use_container_width=True):
+            carregar_planilha_completa.clear()
+            st.rerun()
 
     # Aplica os dados apenas da aba que o usuário selecionou
     df = todas_as_abas[aba_selecionada]
@@ -243,9 +246,8 @@ if arquivo_sistema and arquivo_robo:
                 st.error(f"❌ Erro ao cruzar os dados. Detalhe técnico: {e}")
 
 # =========================================================
-# 7. ATUALIZAÇÃO AUTOMÁTICA INVISÍVEL
+# 7. ATUALIZAÇÃO AUTOMÁTICA (A CADA 30 MINUTOS)
 # =========================================================
-# A ferramenta só é ativada se a página não estiver executando auditoria
+# 30 minutos = 1.800.000 milissegundos
 if not (arquivo_sistema or arquivo_robo):
-    # Auto-refresh configurado para 5000 ms (5 segundos), rodando invisível em segundo plano
-    st_autorefresh(interval=5000, limit=None, key="atualizacao_continua_dp")
+    st_autorefresh(interval=1800000, limit=None, key="atualizacao_continua_dp")
