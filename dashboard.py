@@ -67,7 +67,7 @@ def disparar_email(destinatario, assunto, mensagem_html):
         server.quit()
         return True
     except Exception as e:
-        print(f"Erro ao enviar email: {e}")
+        st.error(f"Erro ao enviar email: {e}")
         return False
 
 # =========================================================
