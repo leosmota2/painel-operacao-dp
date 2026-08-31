@@ -3,20 +3,21 @@ import pandas as pd
 import plotly.express as px
 import io 
 import time
+import json
+import gspread
+from google.oauth2.service_account import Credentials
 from streamlit_autorefresh import st_autorefresh 
 
-# Configuração inicial da página (MUITO IMPORTANTE: Deve ser a primeira linha do Streamlit)
 st.set_page_config(page_title="Portal Conac RH", page_icon="🏢", layout="wide")
 
 # =========================================================
-# 1. ESTILIZAÇÃO E BLINDAGEM CSS GLOBAL
+# 1. ESTILIZAÇÃO CSS
 # =========================================================
 st.markdown("""
     <style>
     footer {visibility: hidden;}
     [data-testid="stStatusWidget"] { display: none !important; }
     [data-testid="stAppViewContainer"] { opacity: 1 !important; transition: none !important; }
-    [data-testid="stHeader"] { opacity: 1 !important; }
     html, body, [class*="css"] { font-family: 'Visby CF', sans-serif; }
     
     @media (prefers-color-scheme: dark) {
@@ -42,7 +43,27 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================================================
-# 2. MENU LATERAL DE NAVEGAÇÃO
+# 2. CONEXÃO COM O BANCO DE DADOS (GOOGLE SHEETS)
+# =========================================================
+@st.cache_resource
+def conectar_google():
+    # Puxa o JSON que escondemos no cofre do Streamlit
+    credenciais_dict = json.loads(st.secrets["google_json"])
+    escopos = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_info(credenciais_dict, scopes=escopos)
+    client = gspread.authorize(creds)
+    return client
+
+try:
+    bd_ferias = conectar_google().open("Base_Ferias_Conac")
+    aba_pedidos = bd_ferias.worksheet("Pedidos")
+    aba_gestores = bd_ferias.worksheet("Acessos_Gestores")
+except Exception as e:
+    st.error("❌ Ops! Não consegui conectar na planilha. Verifique se o e-mail do robô tem permissão de Editor.")
+    st.stop()
+
+# =========================================================
+# 3. MENU LATERAL DE NAVEGAÇÃO
 # =========================================================
 st.sidebar.title("🏢 Conac RH")
 menu_principal = st.sidebar.radio("Navegação:", ["🌴 Portal de Férias", "🔒 Painel DP (Fechamento)"])
@@ -51,45 +72,128 @@ menu_principal = st.sidebar.radio("Navegação:", ["🌴 Portal de Férias", "�
 # MÓDULO A: PORTAL DE FÉRIAS (PÚBLICO)
 # =========================================================
 if menu_principal == "🌴 Portal de Férias":
-    # Banco de Dados Temporário (Simulação visual até conectarmos ao Google Cloud)
-    if 'bd_ferias' not in st.session_state:
-        st.session_state.bd_ferias = pd.DataFrame(columns=["Colaborador", "Gestor", "Início", "Fim", "Status"])
-        
     st.title("🌴 Portal de Férias")
     perfil_ferias = st.radio("Selecione seu perfil de acesso:", ["Colaborador", "Gestor (Aprovação)"], horizontal=True)
     st.write("---")
 
+    # -----------------------------------------------------
+    # VISÃO COLABORADOR
+    # -----------------------------------------------------
     if perfil_ferias == "Colaborador":
         st.write("Preencha os dados abaixo para enviar o pedido ao seu gestor.")
         with st.form("form_ferias", clear_on_submit=True):
             nome = st.text_input("Seu Nome Completo")
-            gestor = st.text_input("E-mail do seu Gestor Direto")
+            gestor = st.text_input("E-mail do seu Gestor Direto (ex: coordenacao@conac.com.br)")
+            
             col_d1, col_d2 = st.columns(2)
             inicio = col_d1.date_input("Data de Início", format="DD/MM/YYYY")
             fim = col_d2.date_input("Data de Retorno", format="DD/MM/YYYY")
             
+            st.write("### Opções Adicionais")
+            vender_ferias = st.checkbox("Desejo vender 1/3 das minhas férias (Abono Pecuniário)")
+            adiantar_13 = st.checkbox("Desejo adiantar a 1ª parcela do meu 13º salário")
+            obs = st.text_area("Observações (Opcional)", placeholder="Algum apontamento importante?")
+            
             if st.form_submit_button("Enviar Solicitação", type="primary"):
-                nova_linha = {"Colaborador": nome, "Gestor": gestor, "Início": inicio.strftime("%d/%m/%Y"), "Fim": fim.strftime("%d/%m/%Y"), "Status": "Pendente"}
-                st.session_state.bd_ferias = pd.concat([st.session_state.bd_ferias, pd.DataFrame([nova_linha])], ignore_index=True)
-                st.success("✅ Solicitação enviada com sucesso para aprovação!")
+                if nome and gestor:
+                    texto_abono = "Sim" if vender_ferias else "Não"
+                    texto_13 = "Sim" if adiantar_13 else "Não"
+                    
+                    # Grava os dados direto na nuvem!
+                    aba_pedidos.append_row([nome, gestor, inicio.strftime("%d/%m/%Y"), fim.strftime("%d/%m/%Y"), texto_abono, texto_13, obs, "Pendente"])
+                    st.success("✅ Solicitação enviada com sucesso para aprovação!")
+                else:
+                    st.warning("⚠️ Preencha seu nome e o e-mail do gestor!")
 
+    # -----------------------------------------------------
+    # VISÃO GESTOR
+    # -----------------------------------------------------
     elif perfil_ferias == "Gestor (Aprovação)":
-        email_gestor = st.text_input("Digite seu e-mail para ver os pedidos da sua equipe:")
-        if email_gestor:
-            pedidos = st.session_state.bd_ferias[(st.session_state.bd_ferias["Gestor"] == email_gestor) & (st.session_state.bd_ferias["Status"] == "Pendente")]
-            if pedidos.empty:
-                st.info("🎉 Nenhuma solicitação pendente para você no momento.")
+        
+        # Controle de sessão para manter o gestor logado
+        if "gestor_logado" not in st.session_state:
+            st.session_state.gestor_logado = False
+            st.session_state.email_logado = ""
+
+        if not st.session_state.gestor_logado:
+            st.write("Área restrita para aprovação de solicitações da equipe.")
+            col_g1, col_g2 = st.columns(2)
+            email_gestor = col_g1.text_input("Seu e-mail corporativo:")
+            senha_gestor = col_g2.text_input("Sua senha de acesso:", type="password")
+            
+            if st.button("Acessar Painel", type="primary"):
+                if email_gestor and senha_gestor:
+                    try:
+                        dados_gestores = pd.DataFrame(aba_gestores.get_all_records())
+                    except:
+                        dados_gestores = pd.DataFrame(columns=["E-mail do Gestor", "Senha"])
+
+                    # Lógica do Primeiro Acesso
+                    if email_gestor not in dados_gestores["E-mail do Gestor"].values:
+                        aba_gestores.append_row([email_gestor, senha_gestor])
+                        st.success("🎉 Primeiro acesso detectado! Sua senha foi cadastrada e seu painel liberado.")
+                        st.session_state.gestor_logado = True
+                        st.session_state.email_logado = email_gestor
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        # Valida a senha existente
+                        senha_correta = dados_gestores.loc[dados_gestores["E-mail do Gestor"] == email_gestor, "Senha"].values[0]
+                        if str(senha_correta) == str(senha_gestor):
+                            st.session_state.gestor_logado = True
+                            st.session_state.email_logado = email_gestor
+                            st.rerun()
+                        else:
+                            st.error("❌ Senha incorreta. Tente novamente.")
+        else:
+            st.write(f"Bem-vindo(a), **{st.session_state.email_logado}**!")
+            if st.button("Sair da Conta"):
+                st.session_state.gestor_logado = False
+                st.session_state.email_logado = ""
+                st.rerun()
+            
+            st.write("---")
+            st.write("### Pedidos Aguardando Análise")
+            
+            try:
+                df_pedidos = pd.DataFrame(aba_pedidos.get_all_records())
+                pendentes = df_pedidos[(df_pedidos["E-mail do Gestor"] == st.session_state.email_logado) & (df_pedidos["Status"] == "Pendente")]
+            except:
+                pendentes = pd.DataFrame()
+
+            if pendentes.empty:
+                st.info("🎉 Nenhuma solicitação pendente para a sua equipe no momento.")
             else:
-                st.write("### Pedidos Aguardando Análise")
-                st.dataframe(pedidos, use_container_width=True, hide_index=True)
-                st.warning("⚠️ Os botões de 'Aprovar' e 'Reprovar' serão ativados após conectarmos a planilha oficial do Google.")
+                # O índice do DataFrame começa em 0. Como a planilha tem cabeçalho (linha 1), 
+                # a linha real do pedido lá no Google é o índice + 2.
+                for idx, row in pendentes.iterrows():
+                    linha_planilha = idx + 2 
+                    with st.expander(f"👤 {row['Colaborador']} | 📅 {row['Data de Início']} até {row['Data de Fim']}"):
+                        st.write(f"**Abono Pecuniário (Venda de Férias):** {row.get('Abono', 'Não')}")
+                        st.write(f"**Adiantamento da 1ª parc. do 13º:** {row.get('Adiantamento_13', 'Não')}")
+                        if row.get('Observações', '') != "":
+                            st.write(f"**Observações:** {row['Observações']}")
+                        
+                        st.write("")
+                        c1, c2 = st.columns(2)
+                        if c1.button("✅ Aprovar Pedido", key=f"apr_{idx}", type="primary"):
+                            aba_pedidos.update_cell(linha_planilha, 8, "Aprovado") # Coluna 8 é o Status
+                            st.success(f"Férias de {row['Colaborador']} aprovadas!")
+                            time.sleep(1)
+                            st.rerun()
+                            
+                        if c2.button("❌ Recusar", key=f"rep_{idx}"):
+                            aba_pedidos.update_cell(linha_planilha, 8, "Recusado")
+                            st.error(f"Pedido de {row['Colaborador']} foi recusado.")
+                            time.sleep(1)
+                            st.rerun()
+
 
 # =========================================================
 # MÓDULO B: PAINEL DP (PROTEGIDO POR SENHA)
 # =========================================================
 elif menu_principal == "🔒 Painel DP (Fechamento)":
     
-    # 1. Sistema de Travamento de Tela
     if "acesso_liberado" not in st.session_state:
         st.session_state.acesso_liberado = False
 
@@ -98,20 +202,38 @@ elif menu_principal == "🔒 Painel DP (Fechamento)":
         st.write("Este painel é de uso exclusivo do Departamento Pessoal.")
         senha = st.text_input("Digite a senha de acesso:", type="password")
         if st.button("Destravar Painel", type="primary"):
-            if senha == "Conac2026": # <-- Você pode mudar a senha aqui!
+            if senha == "Conac2026": 
                 st.session_state.acesso_liberado = True
                 st.rerun()
             else:
                 st.error("❌ Senha incorreta!")
     
-    # 2. Tela Liberada (O Painel Antigo)
     else:
         st.sidebar.write("---")
         if st.sidebar.button("Sair / Bloquear Tela 🔒", use_container_width=True):
             st.session_state.acesso_liberado = False
             st.rerun()
 
-        # Link de compartilhamento do fechamento
+        # O Módulo DP lê a aba de Férias também para vocês acompanharem tudo
+        st.title("🗂️ Visão Geral - Férias")
+        try:
+            df_todas_ferias = pd.DataFrame(aba_pedidos.get_all_records())
+            
+            def colorir_ferias(val):
+                if val == 'Pendente': return 'background-color: #FFF3E0; color: #E65100; font-weight: bold;'
+                elif val == 'Aprovado': return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;'
+                elif val == 'Recusado': return 'background-color: #FFEBEB; color: #D32F2F; font-weight: bold;'
+                return ''
+                
+            st.dataframe(df_todas_ferias.style.map(colorir_ferias, subset=['Status']), use_container_width=True, hide_index=True)
+        except Exception as e:
+            st.info("Ainda não há dados suficientes de férias para mostrar.")
+
+        st.write("---")
+
+        # -------------------------------------------------
+        # O PAINEL DE FECHAMENTO CLÁSSICO CONTINUA AQUI
+        # -------------------------------------------------
         link_compartilhamento = "https://docs.google.com/spreadsheets/d/1QzO8FrhW-C4pH8JldKdOkVPwcZXEly76lDixSzPu9Uo/edit?usp=sharing" 
         link_excel = link_compartilhamento.split('/edit')[0] + '/export?format=xlsx'
 
@@ -272,6 +394,5 @@ elif menu_principal == "🔒 Painel DP (Fechamento)":
                     except Exception as e:
                         st.error(f"❌ Erro ao cruzar os dados. Detalhe técnico: {e}")
 
-        # Atualização automática a cada 30 min (Só funciona se estiver no Painel e sem arquivos de auditoria)
         if not (arquivo_sistema or arquivo_robo):
             st_autorefresh(interval=1800000, limit=None, key="atualizacao_dp")
