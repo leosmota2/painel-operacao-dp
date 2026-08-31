@@ -59,7 +59,7 @@ try:
     aba_pedidos = bd_ferias.worksheet("Pedidos")
     aba_gestores = bd_ferias.worksheet("Acessos_Gestores")
 except Exception as e:
-    st.error("❌ Ops! Não consegui conectar na planilha. Verifique se o e-mail do robô tem permissão de Editor.")
+    st.error(f"❌ Ops! Detalhe do erro técnico: {e}")
     st.stop()
 
 # =========================================================
