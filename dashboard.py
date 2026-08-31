@@ -47,7 +47,6 @@ st.markdown("""
 # =========================================================
 @st.cache_resource
 def conectar_google():
-    # Puxa o JSON que escondemos no cofre do Streamlit
     credenciais_dict = json.loads(st.secrets["google_json"])
     escopos = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(credenciais_dict, scopes=escopos)
@@ -59,7 +58,7 @@ try:
     aba_pedidos = bd_ferias.worksheet("Pedidos")
     aba_gestores = bd_ferias.worksheet("Acessos_Gestores")
 except Exception as e:
-    st.error(f"❌ Ops! Detalhe do erro técnico: {e}")
+    st.error("❌ Ops! Não consegui conectar na planilha. Verifique se o e-mail do robô tem permissão de Editor.")
     st.stop()
 
 # =========================================================
@@ -99,7 +98,6 @@ if menu_principal == "🌴 Portal de Férias":
                     texto_abono = "Sim" if vender_ferias else "Não"
                     texto_13 = "Sim" if adiantar_13 else "Não"
                     
-                    # Grava os dados direto na nuvem!
                     aba_pedidos.append_row([nome, gestor, inicio.strftime("%d/%m/%Y"), fim.strftime("%d/%m/%Y"), texto_abono, texto_13, obs, "Pendente"])
                     st.success("✅ Solicitação enviada com sucesso para aprovação!")
                 else:
@@ -110,7 +108,6 @@ if menu_principal == "🌴 Portal de Férias":
     # -----------------------------------------------------
     elif perfil_ferias == "Gestor (Aprovação)":
         
-        # Controle de sessão para manter o gestor logado
         if "gestor_logado" not in st.session_state:
             st.session_state.gestor_logado = False
             st.session_state.email_logado = ""
@@ -123,8 +120,13 @@ if menu_principal == "🌴 Portal de Férias":
             
             if st.button("Acessar Painel", type="primary"):
                 if email_gestor and senha_gestor:
+                    # BLINDAGEM DA PLANILHA VAZIA AQUI
                     try:
-                        dados_gestores = pd.DataFrame(aba_gestores.get_all_records())
+                        registros_gestores = aba_gestores.get_all_records()
+                        if not registros_gestores:
+                            dados_gestores = pd.DataFrame(columns=["E-mail do Gestor", "Senha"])
+                        else:
+                            dados_gestores = pd.DataFrame(registros_gestores)
                     except:
                         dados_gestores = pd.DataFrame(columns=["E-mail do Gestor", "Senha"])
 
@@ -137,7 +139,6 @@ if menu_principal == "🌴 Portal de Férias":
                         time.sleep(2)
                         st.rerun()
                     else:
-                        # Valida a senha existente
                         senha_correta = dados_gestores.loc[dados_gestores["E-mail do Gestor"] == email_gestor, "Senha"].values[0]
                         if str(senha_correta) == str(senha_gestor):
                             st.session_state.gestor_logado = True
@@ -155,17 +156,20 @@ if menu_principal == "🌴 Portal de Férias":
             st.write("---")
             st.write("### Pedidos Aguardando Análise")
             
+            # BLINDAGEM DA PLANILHA DE PEDIDOS VAZIA AQUI
             try:
-                df_pedidos = pd.DataFrame(aba_pedidos.get_all_records())
-                pendentes = df_pedidos[(df_pedidos["E-mail do Gestor"] == st.session_state.email_logado) & (df_pedidos["Status"] == "Pendente")]
+                registros_pedidos = aba_pedidos.get_all_records()
+                if not registros_pedidos:
+                    pendentes = pd.DataFrame()
+                else:
+                    df_pedidos = pd.DataFrame(registros_pedidos)
+                    pendentes = df_pedidos[(df_pedidos["E-mail do Gestor"] == st.session_state.email_logado) & (df_pedidos["Status"] == "Pendente")]
             except:
                 pendentes = pd.DataFrame()
 
             if pendentes.empty:
                 st.info("🎉 Nenhuma solicitação pendente para a sua equipe no momento.")
             else:
-                # O índice do DataFrame começa em 0. Como a planilha tem cabeçalho (linha 1), 
-                # a linha real do pedido lá no Google é o índice + 2.
                 for idx, row in pendentes.iterrows():
                     linha_planilha = idx + 2 
                     with st.expander(f"👤 {row['Colaborador']} | 📅 {row['Data de Início']} até {row['Data de Fim']}"):
@@ -177,7 +181,7 @@ if menu_principal == "🌴 Portal de Férias":
                         st.write("")
                         c1, c2 = st.columns(2)
                         if c1.button("✅ Aprovar Pedido", key=f"apr_{idx}", type="primary"):
-                            aba_pedidos.update_cell(linha_planilha, 8, "Aprovado") # Coluna 8 é o Status
+                            aba_pedidos.update_cell(linha_planilha, 8, "Aprovado") 
                             st.success(f"Férias de {row['Colaborador']} aprovadas!")
                             time.sleep(1)
                             st.rerun()
@@ -214,25 +218,26 @@ elif menu_principal == "🔒 Painel DP (Fechamento)":
             st.session_state.acesso_liberado = False
             st.rerun()
 
-        # O Módulo DP lê a aba de Férias também para vocês acompanharem tudo
         st.title("🗂️ Visão Geral - Férias")
         try:
-            df_todas_ferias = pd.DataFrame(aba_pedidos.get_all_records())
-            
-            def colorir_ferias(val):
-                if val == 'Pendente': return 'background-color: #FFF3E0; color: #E65100; font-weight: bold;'
-                elif val == 'Aprovado': return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;'
-                elif val == 'Recusado': return 'background-color: #FFEBEB; color: #D32F2F; font-weight: bold;'
-                return ''
-                
-            st.dataframe(df_todas_ferias.style.map(colorir_ferias, subset=['Status']), use_container_width=True, hide_index=True)
+            regs_ferias = aba_pedidos.get_all_records()
+            if regs_ferias:
+                df_todas_ferias = pd.DataFrame(regs_ferias)
+                def colorir_ferias(val):
+                    if val == 'Pendente': return 'background-color: #FFF3E0; color: #E65100; font-weight: bold;'
+                    elif val == 'Aprovado': return 'background-color: #E8F5E9; color: #2E7D32; font-weight: bold;'
+                    elif val == 'Recusado': return 'background-color: #FFEBEB; color: #D32F2F; font-weight: bold;'
+                    return ''
+                st.dataframe(df_todas_ferias.style.map(colorir_ferias, subset=['Status']), use_container_width=True, hide_index=True)
+            else:
+                st.info("Ainda não há dados suficientes de férias para mostrar.")
         except Exception as e:
             st.info("Ainda não há dados suficientes de férias para mostrar.")
 
         st.write("---")
 
         # -------------------------------------------------
-        # O PAINEL DE FECHAMENTO CLÁSSICO CONTINUA AQUI
+        # O PAINEL DE FECHAMENTO CLÁSSICO
         # -------------------------------------------------
         link_compartilhamento = "https://docs.google.com/spreadsheets/d/1QzO8FrhW-C4pH8JldKdOkVPwcZXEly76lDixSzPu9Uo/edit?usp=sharing" 
         link_excel = link_compartilhamento.split('/edit')[0] + '/export?format=xlsx'
