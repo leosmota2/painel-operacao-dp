@@ -11,7 +11,13 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-st.set_page_config(page_title="Portal Conac RH", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="Portal Conac DP", page_icon="🏢", layout="wide")
+
+# =========================================================
+# CONFIGURAÇÃO GERAL
+# =========================================================
+# Cole o link do seu site aqui (ele será usado no botão do e-mail do Gestor)
+LINK_DO_PAINEL = "https://painel-operacao-dp-mmqx3ub3xp5xagyjmrfcfd.streamlit.app/#portal-de-ferias" 
 
 # =========================================================
 # 1. ESTILIZAÇÃO CSS
@@ -54,7 +60,7 @@ def disparar_email(destinatario, assunto, mensagem_html):
         senha = st.secrets["email"]["senha"]
         
         msg = MIMEMultipart()
-        msg['From'] = f"Portal Conac RH <{remetente}>"
+        msg['From'] = f"Portal Conac DP <{remetente}>"
         msg['To'] = destinatario
         msg['Subject'] = assunto
         
@@ -67,7 +73,7 @@ def disparar_email(destinatario, assunto, mensagem_html):
         server.quit()
         return True
     except Exception as e:
-        st.error(f"Erro ao enviar email: {e}")
+        st.error(f"❌ Erro técnico ao enviar e-mail: {e}")
         return False
 
 # =========================================================
@@ -92,7 +98,7 @@ except Exception as e:
 # =========================================================
 # 3. MENU LATERAL DE NAVEGAÇÃO
 # =========================================================
-st.sidebar.title("🏢 Conac RH")
+st.sidebar.title("🏢 Conac DP")
 menu_principal = st.sidebar.radio("Navegação:", ["🌴 Portal de Férias", "🔒 Painel DP (Férias)", "🔒 Painel DP (Fechamento)"])
 
 # =========================================================
@@ -131,19 +137,22 @@ if menu_principal == "🌴 Portal de Férias":
                     
                     aba_pedidos.append_row([nome, email_colab, gestor, inicio.strftime("%d/%m/%Y"), fim.strftime("%d/%m/%Y"), texto_abono, texto_13, obs, "Pendente"])
                     
-                    # DISPARO DE E-MAIL 1: AVISANDO O GESTOR
+                    # DISPARO DE E-MAIL 1: AVISANDO O GESTOR (COM BOTÃO)
                     assunto = f"Nova Solicitação de Férias: {nome}"
                     msg_html = f"""
-                    <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
-                        <h2 style="color: #103149;">Portal Conac RH 🌴</h2>
+                    <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; max-width: 600px; border: 1px solid #eaeaea; border-radius: 10px;">
+                        <h2 style="color: #103149;">Portal Conac DP 🌴</h2>
                         <p>Olá! Você tem uma nova solicitação de férias aguardando sua análise.</p>
-                        <ul>
-                            <li><b>Colaborador:</b> {nome}</li>
-                            <li><b>Período:</b> {inicio.strftime("%d/%m/%Y")} até {fim.strftime("%d/%m/%Y")}</li>
-                            <li><b>Abono (Venda):</b> {texto_abono}</li>
-                            <li><b>Adiantamento 13º:</b> {texto_13}</li>
-                        </ul>
-                        <p>Acesse o Portal do RH para aprovar ou recusar este pedido.</p>
+                        <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                            <p style="margin: 5px 0;"><b>Colaborador:</b> {nome}</p>
+                            <p style="margin: 5px 0;"><b>Período:</b> {inicio.strftime("%d/%m/%Y")} até {fim.strftime("%d/%m/%Y")}</p>
+                            <p style="margin: 5px 0;"><b>Abono (Venda):</b> {texto_abono}</p>
+                            <p style="margin: 5px 0;"><b>Adiantamento 13º:</b> {texto_13}</p>
+                        </div>
+                        <p>Clique no botão abaixo para acessar o Portal do DP, visualizar os detalhes e tomar sua decisão:</p>
+                        <div style="text-align: center; margin: 25px 0;">
+                            <a href="{LINK_DO_PAINEL}" style="background-color: #E55523; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">Acessar Portal do DP</a>
+                        </div>
                     </div>
                     """
                     disparar_email(gestor, assunto, msg_html)
@@ -231,7 +240,7 @@ if menu_principal == "🌴 Portal de Férias":
                                 assunto = "Boas notícias! Suas férias foram aprovadas ✅"
                                 msg_html = f"""
                                 <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
-                                    <h2 style="color: #2E7D32;">Portal Conac RH 🌴</h2>
+                                    <h2 style="color: #2E7D32;">Portal Conac DP 🌴</h2>
                                     <p>Olá {row['Colaborador']}!</p>
                                     <p>Seu pedido de férias para o período de <b>{row['Data de Início']} a {row['Data de Fim']}</b> foi <b>aprovado</b> pelo seu gestor.</p>
                                     <p>O Departamento Pessoal dará andamento à programação e você será notificado quando estiver tudo pronto no sistema.</p>
@@ -251,7 +260,7 @@ if menu_principal == "🌴 Portal de Férias":
                                 assunto = "Atualização do seu pedido de férias ❌"
                                 msg_html = f"""
                                 <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
-                                    <h2 style="color: #D32F2F;">Portal Conac RH 🌴</h2>
+                                    <h2 style="color: #D32F2F;">Portal Conac DP 🌴</h2>
                                     <p>Olá {row['Colaborador']}.</p>
                                     <p>Infelizmente, seu pedido de férias para o período de <b>{row['Data de Início']} a {row['Data de Fim']}</b> foi <b>recusado</b> pelo seu gestor.</p>
                                     <p>Por favor, converse diretamente com a liderança para alinhar um novo período.</p>
@@ -325,7 +334,7 @@ elif menu_principal in ["🔒 Painel DP (Férias)", "🔒 Painel DP (Fechamento)
                                         assunto = "Férias Programadas pelo DP 🏢"
                                         msg_html = f"""
                                         <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
-                                            <h2 style="color: #E55523;">Portal Conac RH 🌴</h2>
+                                            <h2 style="color: #E55523;">Portal Conac DP 🌴</h2>
                                             <p>Olá!</p>
                                             <p>As férias de <b>{row['Colaborador']}</b> para o período de <b>{row['Data de Início']} a {row['Data de Fim']}</b> foram oficialmente <b>programadas no sistema</b> pelo Departamento Pessoal.</p>
                                             <p>Qualquer dúvida, a equipe do DP está à disposição.</p>
