@@ -4,3 +4,5 @@ openpyxl
 plotly
 xlrd
 streamlit-autorefresh
+gspread
+google-auth
