@@ -285,7 +285,7 @@ elif menu_principal in ["🔒 Painel DP (Férias)", "🔒 Painel DP (Fechamento)
         st.write("Painel de uso exclusivo do Departamento Pessoal.")
         senha = st.text_input("Digite a senha de acesso (DP):", type="password")
         if st.button("Destravar Painel", type="primary"):
-            if senha == "Conac2026": 
+            if senha == st.secrets["senhas"]["dp"]: # <--- LINHA ATUALIZADA
                 st.session_state.acesso_liberado = True
                 st.rerun()
             else:
