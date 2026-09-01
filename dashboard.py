@@ -22,8 +22,15 @@ LINK_DO_PAINEL = "https://painel-operacao-dp-mmqx3ub3xp5xagyjmrfcfd.streamlit.ap
 # =========================================================
 # 1. ESTILIZAÇÃO CSS
 # =========================================================
+# =========================================================
+# 1. ESTILIZAÇÃO CSS
+# =========================================================
 st.markdown("""
     <style>
+    /* ESCONDE A BARRA SUPERIOR DO GITHUB E MENU */
+    [data-testid="stHeader"] { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    
     footer {visibility: hidden;}
     [data-testid="stStatusWidget"] { display: none !important; }
     [data-testid="stAppViewContainer"] { opacity: 1 !important; transition: none !important; }
