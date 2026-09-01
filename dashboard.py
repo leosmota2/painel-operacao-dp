@@ -17,11 +17,8 @@ st.set_page_config(page_title="Portal Conac DP", page_icon="🏢", layout="wide"
 # CONFIGURAÇÃO GERAL
 # =========================================================
 # Cole o link do seu site aqui (ele será usado no botão do e-mail do Gestor)
-LINK_DO_PAINEL = "https://painel-operacao-dp-mmqx3ub3xp5xagyjmrfcfd.streamlit.app/#portal-de-ferias" 
+LINK_DO_PAINEL = "https://seu-link-aqui.streamlit.app" 
 
-# =========================================================
-# 1. ESTILIZAÇÃO CSS
-# =========================================================
 # =========================================================
 # 1. ESTILIZAÇÃO CSS
 # =========================================================
@@ -292,7 +289,8 @@ elif menu_principal in ["🔒 Painel DP (Férias)", "🔒 Painel DP (Fechamento)
         st.write("Painel de uso exclusivo do Departamento Pessoal.")
         senha = st.text_input("Digite a senha de acesso (DP):", type="password")
         if st.button("Destravar Painel", type="primary"):
-            if senha == st.secrets["senhas"]["dp"]: # <--- LINHA ATUALIZADA
+            # AQUI ESTÁ A PROTEÇÃO DO COFRE PARA O REPOSITÓRIO PÚBLICO
+            if senha == st.secrets["senhas"]["dp"]: 
                 st.session_state.acesso_liberado = True
                 st.rerun()
             else:
@@ -394,9 +392,11 @@ elif menu_principal in ["🔒 Painel DP (Férias)", "🔒 Painel DP (Fechamento)
                 st.error(f"Erro ao carregar dados de férias. Detalhe: {e}")
 
         # =========================================================
-        # MÓDULO DP - FECHAMENTO (MANTIDO INTACTO)
+        # MÓDULO DP - FECHAMENTO E AUDITORIAS
         # =========================================================
         elif menu_principal == "🔒 Painel DP (Fechamento)":
+            
+            # --- DASHBOARDS DA OPERAÇÃO ---
             link_compartilhamento = "https://docs.google.com/spreadsheets/d/1QzO8FrhW-C4pH8JldKdOkVPwcZXEly76lDixSzPu9Uo/edit?usp=sharing" 
             link_excel = link_compartilhamento.split('/edit')[0] + '/export?format=xlsx'
 
@@ -484,3 +484,169 @@ elif menu_principal in ["🔒 Painel DP (Férias)", "🔒 Painel DP (Fechamento)
 
             except Exception as e:
                 st.error(f"Erro ao carregar fechamento. Detalhe: {e}")
+
+            # --- AUDITORIA DE FGTS ---
+            st.write("---")
+            st.subheader("🤖 Auditoria de FGTS (Sistema x Robô de Guias)")
+            st.write("Arraste os arquivos do seu sistema e do robô abaixo para cruzar os dados.")
+
+            if "uploader_key" not in st.session_state:
+                st.session_state.uploader_key = 0
+
+            col_upload1, col_upload2 = st.columns(2)
+            with col_upload1:
+                arquivo_sistema = st.file_uploader("📂 Base do Sistema", type=["xls", "xlsx"], key=f"file_sistema_{st.session_state.uploader_key}")
+            with col_upload2:
+                arquivo_robo = st.file_uploader("🤖 Base do Robô", type=["xls", "xlsx"], key=f"file_robo_{st.session_state.uploader_key}")
+
+            if arquivo_sistema and arquivo_robo:
+                if st.button("🔍 Cruzar Dados (FGTS)", type="primary"):
+                    with st.spinner("Lendo planilhas e calculando divergências..."):
+                        try:
+                            CODIGOS_CONSIGNADOS = [716, 717, 718, 719, 720]
+                            df_robo_fgts = pd.read_excel(arquivo_robo)
+                            df_robo_fgts = df_robo_fgts.rename(columns={"Código": "Cod_Empresa", "Valor Guia": "Valor_Robo", "Cond": "Nome_Condominio"})
+                            df_robo_fgts["Cod_Empresa"] = pd.to_numeric(df_robo_fgts["Cod_Empresa"], errors="coerce")
+
+                            df_bases = pd.read_excel(arquivo_sistema, sheet_name="TotalEmpresaBaseCalculo")
+                            df_fgts = df_bases[df_bases["codigo_movto"] == 901].copy()
+                            df_fgts["valor"] = df_fgts["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                            df_fgts["valor"] = pd.to_numeric(df_fgts["valor"], errors="coerce").fillna(0)
+                            df_fgts = df_fgts[["empresa", "valor"]].rename(columns={"empresa": "Cod_Empresa", "valor": "Valor_FGTS"})
+                            df_fgts["Cod_Empresa"] = pd.to_numeric(df_fgts["Cod_Empresa"], errors="coerce")
+
+                            df_salarios = pd.read_excel(arquivo_sistema, sheet_name="TotalEmpresaSal")
+                            df_consig = df_salarios[df_salarios["codigo_movto"].isin(CODIGOS_CONSIGNADOS)].copy()
+                            
+                            if not df_consig.empty:
+                                df_consig["valor"] = df_consig["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                                df_consig["valor"] = pd.to_numeric(df_consig["valor"], errors="coerce").fillna(0)
+                                df_consig = df_consig.groupby("empresa")["valor"].sum().reset_index()
+                                df_consig = df_consig.rename(columns={"empresa": "Cod_Empresa", "valor": "Valor_Consignado"})
+                                df_consig["Cod_Empresa"] = pd.to_numeric(df_consig["Cod_Empresa"], errors="coerce")
+                            else:
+                                df_consig = pd.DataFrame(columns=["Cod_Empresa", "Valor_Consignado"])
+
+                            df_folha_consolidada = pd.merge(df_fgts, df_consig, on="Cod_Empresa", how="outer").fillna(0)
+                            df_folha_consolidada["Valor_Folha_Total"] = df_folha_consolidada["Valor_FGTS"] + df_folha_consolidada["Valor_Consignado"]
+                            comparativo = pd.merge(df_folha_consolidada, df_robo_fgts, on="Cod_Empresa", how="left", indicator=True)
+                            comparativo["Valor_Folha_Total"] = comparativo["Valor_Folha_Total"].fillna(0)
+                            comparativo["Valor_Robo"] = comparativo["Valor_Robo"].fillna(0)
+                            comparativo["Diferenca"] = comparativo["Valor_Folha_Total"] - comparativo["Valor_Robo"]
+
+                            def definir_status(linha):
+                                if linha["_merge"] == "left_only": return "ALERTA: Guia não baixada"
+                                elif abs(linha["Diferenca"]) > 0.50: return "ERRO: Valores não batem"
+                                else: return "OK"
+
+                            comparativo["Status da Conferência"] = comparativo.apply(definir_status, axis=1)
+                            comparativo["Nome_Condominio"] = comparativo["Nome_Condominio"].fillna("Nome não encontrado no robô")
+                            colunas_finais = ["Cod_Empresa", "Nome_Condominio", "Valor_Folha_Total", "Valor_Robo", "Diferenca", "Status da Conferência"]
+                            comparativo = comparativo[colunas_finais]
+
+                            buffer = io.BytesIO()
+                            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                                comparativo.to_excel(writer, index=False, sheet_name='Auditoria_FGTS')
+
+                            st.success("✅ Auditoria finalizada! Clique no botão abaixo para baixar o relatório.")
+                            def limpar_uploaders(): st.session_state.uploader_key += 1
+                            st.download_button(label="📥 Baixar Planilha", data=buffer.getvalue(), file_name="Auditoria_FGTS.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", on_click=limpar_uploaders)
+                        except Exception as e:
+                            st.error(f"❌ Erro ao cruzar os dados do FGTS. Detalhe técnico: {e}")
+
+            # --- NOVA SEÇÃO: AUDITORIA DE FOLHA DE PAGAMENTO ---
+            st.write("---")
+            st.subheader("💰 Auditoria de Folha (Variação Salarial)")
+            st.write("Arraste os relatórios do mês anterior e atual para auditar Admissões, Desligamentos e Variações maiores que R$ 500,00.")
+
+            col_folha1, col_folha2 = st.columns(2)
+            with col_folha1:
+                arq_folha_ant = st.file_uploader("📂 Folha Mês Anterior", type=["xls", "xlsx"], key="folha_ant")
+            with col_folha2:
+                arq_folha_atual = st.file_uploader("📂 Folha Mês Atual", type=["xls", "xlsx"], key="folha_atual")
+
+            if arq_folha_ant and arq_folha_atual:
+                if st.button("🔍 Auditar Variação de Folha", type="primary"):
+                    with st.spinner("Calculando líquidos, admissões e cruzando dados..."):
+                        try:
+                            def calcular_liquido_st(arquivo):
+                                df_func = pd.read_excel(arquivo, sheet_name="Funcionario")
+                                df_sal = pd.read_excel(arquivo, sheet_name="Salario")
+                                
+                                df_sal["valor_num"] = df_sal["valor"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
+                                
+                                prov = df_sal[df_sal["natureza"] == "P"].groupby("funcionario")["valor_num"].sum()
+                                desc = df_sal[df_sal["natureza"] == "D"].groupby("funcionario")["valor_num"].sum()
+                                
+                                resumo = pd.DataFrame({"Proventos": prov, "Descontos": desc}).fillna(0)
+                                resumo["Liquido"] = resumo["Proventos"] - resumo["Descontos"]
+                                
+                                resumo = resumo.merge(df_func[["funcionario", "nome", "empresa"]], on="funcionario", how="right").fillna(0)
+                                return resumo
+
+                            df_anterior = calcular_liquido_st(arq_folha_ant)
+                            df_atual = calcular_liquido_st(arq_folha_atual)
+
+                            comparativo = pd.merge(df_atual, df_anterior, on="funcionario", suffixes=("_Atual", "_Anterior"), how="outer")
+                            
+                            # Preenche vazios com zero para a matemática funcionar perfeitamente
+                            comparativo["Liquido_Anterior"] = comparativo["Liquido_Anterior"].fillna(0)
+                            comparativo["Liquido_Atual"] = comparativo["Liquido_Atual"].fillna(0)
+                            
+                            comparativo["nome_Atual"] = comparativo["nome_Atual"].fillna(comparativo["nome_Anterior"])
+                            comparativo["empresa_Atual"] = comparativo["empresa_Atual"].fillna(comparativo["empresa_Anterior"])
+                            
+                            comparativo["Dif_Liquido"] = comparativo["Liquido_Atual"] - comparativo["Liquido_Anterior"]
+                            
+                            # A MÁGICA DOS STATUS ACONTECE AQUI
+                            def classificar_status(linha):
+                                if linha["Liquido_Anterior"] == 0 and linha["Liquido_Atual"] > 0:
+                                    return "🟢 Nova Admissão"
+                                elif linha["Liquido_Anterior"] > 0 and linha["Liquido_Atual"] == 0:
+                                    return "🔴 Desligado / Folha Zerada"
+                                elif abs(linha["Dif_Liquido"]) > 500:
+                                    return "⚠️ Variação > R$ 500"
+                                else:
+                                    return "OK"
+
+                            comparativo["Status"] = comparativo.apply(classificar_status, axis=1)
+                            
+                            # Filtra tirando quem está "OK"
+                            diferencas = comparativo[comparativo["Status"] != "OK"].copy()
+                            
+                            colunas = ["empresa_Atual", "funcionario", "nome_Atual", "Liquido_Anterior", "Liquido_Atual", "Dif_Liquido", "Status"]
+                            diferencas = diferencas[colunas].rename(columns={
+                                "empresa_Atual": "Cód. Empresa",
+                                "funcionario": "Matrícula", 
+                                "nome_Atual": "Nome"
+                            })
+
+                            st.warning(f"Foram encontrados {len(diferencas)} alertas na folha (Admissões, Desligamentos ou Variações).")
+                            
+                            # Mostra a tabela colorida na tela
+                            def pintar_status(val):
+                                if 'Nova' in str(val): return 'color: #2E7D32; font-weight: bold;'
+                                elif 'Desligado' in str(val): return 'color: #D32F2F; font-weight: bold;'
+                                elif 'Variação' in str(val): return 'color: #E65100; font-weight: bold;'
+                                return ''
+                                
+                            st.dataframe(diferencas.style.map(pintar_status, subset=['Status']).format({
+                                "Liquido_Anterior": "R$ {:.2f}", 
+                                "Liquido_Atual": "R$ {:.2f}", 
+                                "Dif_Liquido": "R$ {:.2f}"
+                            }), use_container_width=True, hide_index=True)
+
+                            buffer_folha = io.BytesIO()
+                            with pd.ExcelWriter(buffer_folha, engine='openpyxl') as writer:
+                                diferencas.to_excel(writer, index=False, sheet_name='Auditoria_Folha')
+                            
+                            st.download_button(
+                                label="📥 Baixar Relatório de Divergências (Excel)",
+                                data=buffer_folha.getvalue(),
+                                file_name="Auditoria_Diferencas_Folha.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                type="secondary"
+                            )
+                            
+                        except Exception as e:
+                            st.error(f"❌ Erro ao cruzar as folhas. Verifique se os arquivos estão corretos. Detalhe técnico: {e}")
